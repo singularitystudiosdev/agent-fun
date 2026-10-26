@@ -1,0 +1,25 @@
+{
+  "name": "Distracted Boyfriend",
+  "slug": "distracted-boyfriend",
+  "kind": "still",
+  "source": {
+    "url": "https://imgflip.com/memetemplate/112126428/Distracted-Boyfriend",
+    "media": "https://i.imgflip.com/1ur9b0.jpg",
+    "imgflipTemplateId": 112126428,
+    "retrieved": "2026-10-25",
+    "note": "Imgflip blank (caption-free) template"
+  },
+  "crop": {
+    "x": 200,
+    "y": 0,
+    "size": 800
+  },
+  "output": {
+    "width": 192,
+    "height": 192,
+    "bytes": 8600,
+    "frames": 1,
+    "quality": 86,
+    "still": null
+  }
+}

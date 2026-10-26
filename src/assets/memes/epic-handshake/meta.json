@@ -1,0 +1,25 @@
+{
+  "name": "Epic Handshake",
+  "slug": "epic-handshake",
+  "kind": "still",
+  "source": {
+    "url": "https://imgflip.com/memetemplate/135256802/Epic-Handshake",
+    "media": "https://i.imgflip.com/28j0te.jpg",
+    "imgflipTemplateId": 135256802,
+    "retrieved": "2026-10-25",
+    "note": "Imgflip blank (caption-free) template"
+  },
+  "crop": {
+    "x": 230,
+    "y": 40,
+    "size": 440
+  },
+  "output": {
+    "width": 192,
+    "height": 192,
+    "bytes": 6252,
+    "frames": 1,
+    "quality": 86,
+    "still": null
+  }
+}

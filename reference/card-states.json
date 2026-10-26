@@ -1,0 +1,139 @@
+{
+ "yes_rest": {
+  "background-color": "oklab(0.603598 -0.149933 0.0964872 / 0.15)",
+  "color": "lab(45.7361 -45.2267 37.3056)",
+  "opacity": "1",
+  "scale": "none",
+  "translate": "none",
+  "box-shadow": "none",
+  "text-decoration-line": "none",
+  "transition-duration": "0.15s",
+  "transition-property": "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter, display, content-visibility, overlay, pointer-events"
+ },
+ "yesLabel_rest": "1",
+ "yesPrice_rest": "0",
+ "yes_hover": {
+  "background-color": "lab(45.7361 -45.2267 37.3056)",
+  "color": "rgb(255, 255, 255)",
+  "opacity": "1",
+  "scale": "none",
+  "translate": "none",
+  "box-shadow": "none",
+  "text-decoration-line": "none",
+  "transition-duration": "0.15s",
+  "transition-property": "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter, display, content-visibility, overlay, pointer-events"
+ },
+ "yesLabel_hover": "0",
+ "yesPrice_hover": "1",
+ "card_whileHoverYes": {
+  "background-color": "lab(100 0 0)",
+  "color": "lab(15.4544 -0.764295 -4.69404)",
+  "opacity": "1",
+  "scale": "none",
+  "translate": "0px -1px",
+  "box-shadow": "lab(0 0 0 / 0) 0px 0px 0px 0px inset, oklch(0.271499 0.0128939 256.761 / 0.06) 0px 0px 0px 1px, rgba(0, 0, 0, 0.06) 0px 1px 1px -0.5px, rgba(0, 0, 0, 0.06) 0px 3px 3px -1.5px, rgba(0, 0, 0, 0.06) 0px 6px 6px -3px, lab(0 0 0 / 0) 0px 0px 0px 0px, lab(0 0 0 / 0) 0px 0px 0px 0px",
+  "text-decoration-line": "none",
+  "transition-duration": "0.15s",
+  "transition-property": "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter, display, content-visibility, overlay, pointer-events"
+ },
+ "title_whileHover": {
+  "background-color": "rgba(0, 0, 0, 0)",
+  "color": "lab(15.4544 -0.764295 -4.69404)",
+  "opacity": "1",
+  "scale": "none",
+  "translate": "none",
+  "box-shadow": "none",
+  "text-decoration-line": "underline",
+  "transition-duration": "0s",
+  "transition-property": "all"
+ },
+ "no_rest": {
+  "background-color": "oklab(0.570509 0.201896 0.109506 / 0.09)",
+  "color": "lab(47.8918 72.1772 58.3835)",
+  "opacity": "1",
+  "scale": "none",
+  "translate": "none",
+  "box-shadow": "none",
+  "text-decoration-line": "none",
+  "transition-duration": "0.15s",
+  "transition-property": "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter, display, content-visibility, overlay, pointer-events"
+ },
+ "no_hover": {
+  "background-color": "lab(47.8918 72.1772 58.3835)",
+  "color": "rgb(255, 255, 255)",
+  "opacity": "1",
+  "scale": "none",
+  "translate": "none",
+  "box-shadow": "none",
+  "text-decoration-line": "none",
+  "transition-duration": "0.15s",
+  "transition-property": "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter, display, content-visibility, overlay, pointer-events"
+ },
+ "gift_rest": {
+  "background-color": "rgba(0, 0, 0, 0)",
+  "color": "lab(47.7217 -1.37293 -5.88264)",
+  "opacity": "1",
+  "scale": "none",
+  "translate": "none",
+  "box-shadow": "none",
+  "text-decoration-line": "none",
+  "transition-duration": "0.15s",
+  "transition-property": "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter, display, content-visibility, overlay, pointer-events"
+ },
+ "gift_hover": {
+  "background-color": "lab(0 0 0 / 0.05)",
+  "color": "lab(47.7217 -1.37293 -5.88264)",
+  "opacity": "1",
+  "scale": "none",
+  "translate": "none",
+  "box-shadow": "none",
+  "text-decoration-line": "none",
+  "transition-duration": "0.15s",
+  "transition-property": "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter, display, content-visibility, overlay, pointer-events"
+ },
+ "bm_rest": {
+  "background-color": "rgba(0, 0, 0, 0)",
+  "color": "lab(15.4544 -0.764295 -4.69404)",
+  "opacity": "1",
+  "scale": "none",
+  "translate": "none",
+  "box-shadow": "none",
+  "text-decoration-line": "none",
+  "transition-duration": "0.15s",
+  "transition-property": "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter, display, content-visibility, overlay, pointer-events"
+ },
+ "bm_hover": {
+  "background-color": "lab(0 0 0 / 0.05)",
+  "color": "lab(15.4544 -0.764295 -4.69404)",
+  "opacity": "1",
+  "scale": "none",
+  "translate": "none",
+  "box-shadow": "none",
+  "text-decoration-line": "none",
+  "transition-duration": "0.15s",
+  "transition-property": "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter, display, content-visibility, overlay, pointer-events"
+ },
+ "bm_active": {
+  "background-color": "lab(0 0 0 / 0.05)",
+  "color": "lab(15.4544 -0.764295 -4.69404)",
+  "opacity": "1",
+  "scale": "0.97",
+  "translate": "none",
+  "box-shadow": "none",
+  "text-decoration-line": "none",
+  "transition-duration": "0.15s",
+  "transition-property": "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter, display, content-visibility, overlay, pointer-events"
+ },
+ "rowName_hover": {
+  "background-color": "rgba(0, 0, 0, 0)",
+  "color": "lab(15.4544 -0.764295 -4.69404)",
+  "opacity": "1",
+  "scale": "none",
+  "translate": "none",
+  "box-shadow": "none",
+  "text-decoration-line": "underline",
+  "transition-duration": "0s",
+  "transition-property": "all"
+ },
+ "rowName_active_anchor": "1"
+}

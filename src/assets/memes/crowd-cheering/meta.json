@@ -1,0 +1,27 @@
+{
+  "name": "Crowd Cheering",
+  "slug": "crowd-cheering",
+  "kind": "animated",
+  "source": {
+    "url": "https://imgflip.com/memetemplate/321852411/crowd-cheering",
+    "media": "https://i.imgflip.com/5bmewr.mp4",
+    "imgflipTemplateId": 321852411,
+    "retrieved": "2026-10-25",
+    "note": "Imgflip blank (caption-free) template"
+  },
+  "crop": {
+    "x": 156,
+    "y": 0,
+    "size": 200
+  },
+  "output": {
+    "width": 192,
+    "height": 192,
+    "bytes": 135820,
+    "frames": 19,
+    "frameMs": 133,
+    "quality": 50,
+    "fps": 7.5,
+    "still": "still.png"
+  }
+}

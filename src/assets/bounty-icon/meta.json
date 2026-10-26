@@ -1,0 +1,14 @@
+{
+  "label": "Empty wallet (square)",
+  "format": "webp",
+  "bytes": 212948,
+  "loopMs": 5021,
+  "technique": "Perfect square: 160x160 centre crop of the 170x160 source (x+5, y+0), Lanczos to 192x192; all 74 frames at source timing, img2webp -q 88 -m 6 -d 67; no effects, no rounding",
+  "sources": [
+    {
+      "url": "https://www.youtube.com/watch?v=hf4qbsRBA4Q",
+      "license": "user-supplied meme clip",
+      "retrieved": "2026-10-25"
+    }
+  ]
+}

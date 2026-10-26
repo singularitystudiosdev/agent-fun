@@ -1,0 +1,27 @@
+{
+  "name": "Spongebob Imagination",
+  "slug": "spongebob-imagination",
+  "kind": "animated",
+  "source": {
+    "url": "https://imgflip.com/memetemplate/512296930/Spongebob-Imagination",
+    "media": "https://i.imgflip.com/8h0aua.mp4",
+    "imgflipTemplateId": 512296930,
+    "retrieved": "2026-10-25",
+    "note": "Imgflip blank (caption-free) template"
+  },
+  "crop": {
+    "x": 330,
+    "y": 40,
+    "size": 640
+  },
+  "output": {
+    "width": 192,
+    "height": 192,
+    "bytes": 143354,
+    "frames": 51,
+    "frameMs": 83,
+    "quality": 42,
+    "fps": 12,
+    "still": "still.png"
+  }
+}

@@ -1,0 +1,66 @@
+/* Tokens and styles for the gift "Rewards" tooltip (src/components/GiftRewards.tsx). Imported by index.css.
+ * Every value is polymarket.com's own, retrieved 2026-10-25 from the live CSS bundle
+ * (.tmp/polymarket-ref/bundles/chunks/3zlgjr5mlf4rt.css) and from the live popup's computed styles. */
+
+@theme {
+  /* :root --color-pk-brand-500 = --color-pk-content-accent-brand (live computed): the tooltip "Learn more" links. */
+  --color-pk-content-accent-brand: lab(44.7153% 32.3672 -86.8665);
+  /* :root --color-pk-grouped (live computed, = gray-100 #f4f5f7): the skeleton placeholders. */
+  --color-pk-grouped: lab(96.5213% -0.0690222 -0.946689);
+  /* :root --color-pk-border-elevated (live computed, = gray-200 = pk-border). */
+  --color-pk-border-elevated: lab(91.9748% -0.136733 -1.92862);
+  /* :root --color-button-outline-text / --color-button-outline-border: the "Add Rewards" outline button. */
+  --color-button-outline-text: var(--color-pk-content-primary);
+  --color-button-outline-border: var(--color-pk-border);
+}
+
+/* .font-inter-body: `font-inter-body` on the popup (live CSS bundle). */
+@utility font-inter-body {
+  font-family: var(--font-inter, 'Inter'), sans-serif;
+  font-feature-settings: var(--inter-font-features);
+}
+
+/* .text-heading-base (live CSS bundle): the table keys and values. */
+@utility text-heading-base {
+  font-family: var(--font-inter, 'Inter'), sans-serif;
+  font-feature-settings: var(--inter-font-features);
+  letter-spacing: -0.09px;
+  font-size: 14px;
+  line-height: 16px;
+}
+
+/* .polykit-elevated-surface (live CSS bundle): outline buttons inside an elevated surface use the elevated border. */
+@utility polykit-elevated-surface {
+  & [data-polykit][data-slot='button'][data-variant='outline']:not(:disabled):not([aria-disabled='true']) {
+    border-color: var(--color-pk-border-elevated);
+  }
+}
+
+/* .animate-in / .fade-in / @keyframes enter (live CSS bundle, tw-animate-css): the 200 ms fade of the table values. */
+@utility animate-in {
+  animation: enter var(--tw-animation-duration, var(--tw-duration, 0.15s)) var(--tw-ease, ease)
+    var(--tw-animation-delay, 0s) var(--tw-animation-iteration-count, 1) var(--tw-animation-direction, normal)
+    var(--tw-animation-fill-mode, none);
+}
+@utility fade-in {
+  --tw-enter-opacity: 0;
+}
+@keyframes enter {
+  0% {
+    opacity: var(--tw-enter-opacity, 1);
+  }
+}
+
+/* @keyframes skeletonShimmer (live CSS bundle): the loading placeholders. */
+@keyframes skeletonShimmer {
+  to {
+    transform: translate(200%);
+  }
+}
+
+/* Reduced motion: the table values and the sponsor block appear without the fade (also guarded per element by `motion-reduce:animate-none`). */
+@media (prefers-reduced-motion: reduce) {
+  .animate-in {
+    animation: none;
+  }
+}

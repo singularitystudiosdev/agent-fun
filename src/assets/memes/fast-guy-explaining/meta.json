@@ -1,0 +1,27 @@
+{
+  "name": "Fast Guy Explaining",
+  "slug": "fast-guy-explaining",
+  "kind": "animated",
+  "source": {
+    "url": "https://imgflip.com/memetemplate/292752607/fast-guy-explaining",
+    "media": "https://i.imgflip.com/4uapcv.mp4",
+    "imgflipTemplateId": 292752607,
+    "retrieved": "2026-10-25",
+    "note": "Imgflip blank (caption-free) template"
+  },
+  "crop": {
+    "x": 150,
+    "y": 30,
+    "size": 300
+  },
+  "output": {
+    "width": 192,
+    "height": 192,
+    "bytes": 124010,
+    "frames": 38,
+    "frameMs": 67,
+    "quality": 80,
+    "fps": 15,
+    "still": "still.png"
+  }
+}

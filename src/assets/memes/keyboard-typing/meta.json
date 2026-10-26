@@ -1,0 +1,27 @@
+{
+  "name": "Keyboard Typing (Bruce Almighty)",
+  "slug": "keyboard-typing",
+  "kind": "animated",
+  "source": {
+    "url": "https://imgflip.com/memetemplate/278917772/Keyboard-Typing",
+    "media": "https://i.imgflip.com/4m26bw.mp4",
+    "imgflipTemplateId": 278917772,
+    "retrieved": "2026-10-25",
+    "note": "Imgflip blank (caption-free) template"
+  },
+  "crop": {
+    "x": 135,
+    "y": 0,
+    "size": 370
+  },
+  "output": {
+    "width": 192,
+    "height": 192,
+    "bytes": 67518,
+    "frames": 20,
+    "frameMs": 100,
+    "quality": 80,
+    "fps": 10,
+    "still": "still.png"
+  }
+}

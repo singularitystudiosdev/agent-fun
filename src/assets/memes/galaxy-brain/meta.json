@@ -1,0 +1,29 @@
+{
+  "name": "Galaxy Brain",
+  "slug": "galaxy-brain",
+  "kind": "animated",
+  "source": {
+    "url": "https://imgflip.com/memetemplate/409530260/Big-Brain-Galaxy-Gif",
+    "media": "https://i.imgflip.com/6rtnkk.mp4",
+    "imgflipTemplateId": 409530260,
+    "retrieved": "2026-10-25",
+    "note": "Imgflip blank (caption-free) template"
+  },
+  "crop": {
+    "x": 340,
+    "y": 60,
+    "size": 600,
+    "startSec": 1.6,
+    "durationSec": 2.4
+  },
+  "output": {
+    "width": 192,
+    "height": 192,
+    "bytes": 122014,
+    "frames": 29,
+    "frameMs": 83,
+    "quality": 70,
+    "fps": 12,
+    "still": "still.png"
+  }
+}

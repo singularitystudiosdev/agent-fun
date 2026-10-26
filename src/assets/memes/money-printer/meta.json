@@ -1,0 +1,27 @@
+{
+  "name": "Money Printer Go Brrr",
+  "slug": "money-printer",
+  "kind": "animated",
+  "source": {
+    "url": "https://imgflip.com/memetemplate/413423807/Powel-Money-Printer",
+    "media": "https://i.imgflip.com/6u53un.mp4",
+    "imgflipTemplateId": 413423807,
+    "retrieved": "2026-10-25",
+    "note": "Imgflip blank (caption-free) template"
+  },
+  "crop": {
+    "x": 500,
+    "y": 0,
+    "size": 320
+  },
+  "output": {
+    "width": 192,
+    "height": 192,
+    "bytes": 127472,
+    "frames": 38,
+    "frameMs": 67,
+    "quality": 80,
+    "fps": 15,
+    "still": "still.png"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "Jarvis",
+  "slug": "jarvis",
+  "kind": "animated",
+  "source": {
+    "url": "https://imgflip.com/memetemplate/308448403/Jarvis",
+    "media": "https://i.imgflip.com/53n4b7.mp4",
+    "imgflipTemplateId": 308448403,
+    "retrieved": "2026-10-25",
+    "note": "Imgflip blank (caption-free) template"
+  },
+  "crop": {
+    "x": 109,
+    "y": 0,
+    "size": 280
+  },
+  "output": {
+    "width": 192,
+    "height": 192,
+    "bytes": 75694,
+    "frames": 31,
+    "frameMs": 67,
+    "quality": 80,
+    "fps": 15,
+    "still": "still.png"
+  }
+}

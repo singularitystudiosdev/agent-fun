@@ -1,0 +1,27 @@
+{
+  "name": "Thorough Security Check At Gate",
+  "slug": "security-check",
+  "kind": "animated",
+  "source": {
+    "url": "https://imgflip.com/memetemplate/316543105/Thorough-security-check-at-gate",
+    "media": "https://i.imgflip.com/58gm81.mp4",
+    "imgflipTemplateId": 316543105,
+    "retrieved": "2026-10-25",
+    "note": "Imgflip blank (caption-free) template"
+  },
+  "crop": {
+    "x": 0,
+    "y": 96,
+    "size": 170
+  },
+  "output": {
+    "width": 192,
+    "height": 192,
+    "bytes": 138404,
+    "frames": 47,
+    "frameMs": 100,
+    "quality": 60,
+    "fps": 10,
+    "still": "still.png"
+  }
+}

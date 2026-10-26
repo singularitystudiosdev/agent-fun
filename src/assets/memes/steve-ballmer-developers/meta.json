@@ -1,0 +1,28 @@
+{
+  "name": "Steve Ballmer \"Developers\"",
+  "slug": "steve-ballmer-developers",
+  "kind": "animated",
+  "source": {
+    "url": "https://imgflip.com/memetemplate/369470687/Steve-Ballmer-Developers",
+    "media": "https://i.imgflip.com/63z1en.mp4",
+    "imgflipTemplateId": 369470687,
+    "retrieved": "2026-10-25",
+    "note": "Imgflip blank (caption-free) template"
+  },
+  "crop": {
+    "x": 60,
+    "y": 20,
+    "size": 200,
+    "durationSec": 2.6
+  },
+  "output": {
+    "width": 192,
+    "height": 192,
+    "bytes": 111614,
+    "frames": 39,
+    "frameMs": 67,
+    "quality": 80,
+    "fps": 15,
+    "still": "still.png"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "This Is Fine",
+  "slug": "this-is-fine",
+  "kind": "animated",
+  "source": {
+    "url": "https://imgflip.com/memetemplate/380285687/This-is-Fine-Animated-Template",
+    "media": "https://i.imgflip.com/6aeubb.mp4",
+    "imgflipTemplateId": 380285687,
+    "retrieved": "2026-10-25",
+    "note": "Imgflip blank (caption-free) template"
+  },
+  "crop": {
+    "x": 110,
+    "y": 0,
+    "size": 215
+  },
+  "output": {
+    "width": 192,
+    "height": 192,
+    "bytes": 142940,
+    "frames": 33,
+    "frameMs": 100,
+    "quality": 60,
+    "fps": 10,
+    "still": "still.png"
+  }
+}

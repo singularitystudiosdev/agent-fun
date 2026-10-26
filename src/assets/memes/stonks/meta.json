@@ -1,0 +1,25 @@
+{
+  "name": "Stonks",
+  "slug": "stonks",
+  "kind": "still",
+  "source": {
+    "url": "https://imgflip.com/memetemplate/219964921/STONKS-without-STONKS",
+    "media": "https://i.imgflip.com/3mym0p.png",
+    "imgflipTemplateId": 219964921,
+    "retrieved": "2026-10-25",
+    "note": "Imgflip blank (caption-free) template"
+  },
+  "crop": {
+    "x": 0,
+    "y": 0,
+    "size": 960
+  },
+  "output": {
+    "width": 192,
+    "height": 192,
+    "bytes": 9242,
+    "frames": 1,
+    "quality": 86,
+    "still": null
+  }
+}

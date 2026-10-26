@@ -1,0 +1,27 @@
+{
+  "name": "Leonardo DiCaprio Cheers",
+  "slug": "leonardo-dicaprio-cheers",
+  "kind": "animated",
+  "source": {
+    "url": "https://imgflip.com/memetemplate/176717425/Leonardo-Dicaprio-Cheers",
+    "media": "https://i.imgflip.com/2x7o1d.mp4",
+    "imgflipTemplateId": 176717425,
+    "retrieved": "2026-10-25",
+    "note": "Imgflip blank (caption-free) template"
+  },
+  "crop": {
+    "x": 370,
+    "y": 20,
+    "size": 560
+  },
+  "output": {
+    "width": 192,
+    "height": 192,
+    "bytes": 147912,
+    "frames": 31,
+    "frameMs": 83,
+    "quality": 80,
+    "fps": 12,
+    "still": "still.png"
+  }
+}

@@ -1,0 +1,214 @@
+@import 'tailwindcss';
+@import './rewards.css';
+
+/* Polymarket switches theme on <html data-theme>, not on prefers-color-scheme. */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/* Inter Variable, the exact file polymarket.com serves (one file, weight axis 100-900, so 440/490/590 render true). */
+@font-face {
+  font-family: inter;
+  src: url('/fonts/InterVariable.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: Inter;
+  src: url('/fonts/InterVariable.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'inter Fallback';
+  src: local(Arial);
+  ascent-override: 89.79%;
+  descent-override: 22.36%;
+  line-gap-override: 0%;
+  size-adjust: 107.89%;
+}
+
+/* Light-theme tokens as resolved from polymarket.com :root (lab() where the site declares lab()). */
+@theme {
+  /* next/font's variable on polymarket.com; body uses it bare, .text-body-* append sans-serif. */
+  --font-inter: inter, 'inter Fallback';
+  --font-sans: var(--font-inter);
+  --inter-font-features: 'liga' 1, 'calt' 1, 'cv01' 1, 'cv02' 1, 'cv03' 1, 'cv04' 1, 'cv09' 0, 'cv11' 1, 'cv15' 1;
+
+  --color-pk-content-primary: lab(15.4544% -0.764295 -4.69404);
+  --color-pk-content-secondary: lab(47.7217% -1.37293 -5.88264);
+  --color-pk-elevated: lab(100% 0 0);
+  --color-pk-border: lab(91.9748% -0.136733 -1.92862);
+  --color-pk-gray-400: lab(78.7165% -0.528604 -3.76731);
+  --color-pk-green-400: #04af52;
+  --color-pk-green-500: lab(56.1642% -52.1702 40.2684);
+  --color-pk-green-600: lab(45.7361% -45.2267 37.3056);
+  --color-pk-green-800: #00450a;
+  --color-pk-red-100: #ffcfc6;
+  --color-pk-red-200: #ffa597;
+  --color-pk-red-500: lab(47.8918% 72.1772 58.3835);
+  --color-pk-red-700: #930000;
+  --color-pk-hover-overlay-darker: lab(0% 0 0 / 0.05);
+  /* Homepage (bounty board) tokens: light-theme values from polymarket.com's live CSS bundle, 2026-10-25. */
+  --color-pk-surface: #fff;
+  --color-pk-gray-100: #f4f5f7;
+  --color-pk-gray-200: #e6e8ec;
+  --color-pk-gray-300: #d4d7dc;
+  --color-pk-gray-500: #abb2bb;
+  --color-pk-gray-600: #8b929b;
+  --color-pk-content-tertiary: var(--color-pk-gray-600);
+  --color-pk-brand-500: #2e5cff;
+  --color-pk-blue-100: #f0f3ff;
+  --color-pk-blue-200: #e0e7ff;
+  /* Hero chart series, in legend order (polymarket-clone HeroChart SERIES_COLORS). */
+  --color-pk-chart-1: #1c3fe2;
+  --color-pk-chart-2: #7ab3f0;
+  --color-pk-chart-3: #f5b70a;
+  --color-pk-chart-4: #e0632a;
+  --color-pk-chart-5: #8f3dd7;
+  --color-button-ghost-bg: transparent;
+  --color-button-ghost-text: var(--color-pk-content-primary);
+  --color-ring: var(--color-pk-content-secondary);
+
+  --radius: 0.7rem;
+  --radius-xs: calc(var(--radius) - 6px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --shadow-pk-minimal-soft: 0 0 0 1px lab(0% 0 0 / 0.06), 0 2px 6px -0.5px lab(0% 0 0 / 0.025), 0 2px 10px 0 lab(0% 0 0 / 0.025);
+  --shadow-pk-middle: 0 0 0 1px oklch(from #23272d l c h / 0.06), 0 1px 1px -0.5px rgba(0, 0, 0, 0.06), 0 3px 3px -1.5px rgba(0, 0, 0, 0.06), 0 6px 6px -3px rgba(0, 0, 0, 0.06);
+}
+
+@utility text-body-base {
+  font-family: var(--font-inter, 'Inter'), sans-serif;
+  letter-spacing: -0.09px;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+@utility text-body-sm {
+  font-family: var(--font-inter, 'Inter'), sans-serif;
+  letter-spacing: -0.1px;
+  font-size: 13px;
+  font-weight: 490;
+  line-height: 16px;
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@layer base {
+  *,
+  ::after,
+  ::before {
+    border-color: var(--color-pk-border);
+  }
+  body {
+    font-feature-settings: var(--inter-font-features);
+    background: var(--color-pk-elevated);
+    color: var(--color-pk-content-primary);
+  }
+}
+
+/* @artsy/fresnel breakpoint containers: the off-breakpoint branch is hidden and left empty. */
+@media not all and (min-width: 1024px) {
+  .fresnel-greaterThanOrEqual-lg {
+    display: none !important;
+  }
+}
+@media (min-width: 1024px) {
+  .fresnel-lessThan-lg {
+    display: none !important;
+  }
+}
+
+/* Bookmark: a 15-frame, 16px CSS sprite (frames 0-4 gray outline, 5-14 blue fill), exactly as polymarket.com ships it. */
+.bookmarkButton {
+  background-repeat: no-repeat;
+  background-position: 0 center;
+}
+.bookmarkButton.small {
+  background-image: url('/icons/bookmark-sprite-small.svg');
+  background-size: 1500% auto;
+  width: 16px;
+  height: 16px;
+}
+.bookmarkButton.active {
+  background-position: 100% center;
+}
+.bookmarkButton.unrolled {
+  background-position: 100% center;
+  animation: bookmark-unroll 0.5s steps(14, end) forwards;
+}
+.bookmarkButton.rolled {
+  background-position: 0 center;
+}
+@keyframes bookmark-unroll {
+  from {
+    background-position: 0 center;
+  }
+  to {
+    background-position: 100% center;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bookmarkButton.unrolled {
+    animation: none;
+    background-position: 100% center;
+  }
+}
+
+/* ---- Bounty card additions. Values are polymarket.com's own (CSS bundle chunks/3zlgjr5mlf4rt.css, 2026-10-25) unless a comment says otherwise. ---- */
+@theme {
+  /* The hero "Ends in" timer paints a literal #ef4444 when fewer than 1 day is left (chunk 2rxxpq-rqjpdd.js). Not a Polymarket token, so no pk- prefix. */
+  --color-countdown-urgent: #ef4444;
+  /* AnimatedLabel animation="smooth" = spring {mass 1, stiffness 170, damping 26} (chunk 3f2bjaa7rl1g2.js). Settles in 702 ms (50% at 129 ms, 95% at 363 ms).
+     Sampled by .tmp/bounty-ref/scripts/spring-easing.mjs into 31 linear() points (max error 0.0086 of travel = 0.21 px on a 24 px stride).
+     polymarket.com ships its own easings as linear() lists the same way (--ease-pk-expand, --ease-pk-spring). */
+  /* Two 316.5px homepage columns plus the gap-3 between them: the wallet picker never grows wider than the card row. */
+  --container-pk-card-row: 645px;
+  --ease-pk-roll: linear(0, 0.0381, 0.1254, 0.2334, 0.3453, 0.4514, 0.5472, 0.6306, 0.7016, 0.7609, 0.8097, 0.8494, 0.8814, 0.9071, 0.9275, 0.9436, 0.9563, 0.9662, 0.9739, 0.9799, 0.9846, 0.9882, 0.991, 0.9931, 0.9948, 0.996, 0.997, 0.9977, 0.9983, 0.9987, 1);
+}
+
+/* .text-body-xs / .text-heading-xl / .text-heading-2xl (live CSS bundle, verbatim). */
+@utility text-body-xs {
+  font-family: var(--font-inter, 'Inter'), sans-serif;
+  font-feature-settings: var(--inter-font-features);
+  letter-spacing: -0.1px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+@utility text-heading-xl {
+  font-family: var(--font-inter, 'Inter'), sans-serif;
+  font-feature-settings: var(--inter-font-features);
+  letter-spacing: -0.01em;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 24px;
+}
+@utility text-heading-2xl {
+  font-family: var(--font-inter, 'Inter'), sans-serif;
+  font-feature-settings: var(--inter-font-features);
+  letter-spacing: -0.015em;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 28px;
+}
+
+/* One rolling digit glyph: transform-only transition on the 702 ms spring above. check-ui allows duration-over-300ms only in index.css, hence a utility instead of duration-[702ms] in the component. */
+@utility pk-roll {
+  transition-property: transform;
+  transition-duration: 702ms;
+  transition-timing-function: var(--ease-pk-roll);
+}
+@media (prefers-reduced-motion: reduce) {
+  .pk-roll {
+    transition: none;
+  }
+}

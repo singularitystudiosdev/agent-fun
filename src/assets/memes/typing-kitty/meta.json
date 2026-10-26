@@ -1,0 +1,27 @@
+{
+  "name": "Typing Kitty",
+  "slug": "typing-kitty",
+  "kind": "animated",
+  "source": {
+    "url": "https://imgflip.com/memetemplate/260948664/Typing-kitty",
+    "media": "https://i.imgflip.com/4bd1a0.mp4",
+    "imgflipTemplateId": 260948664,
+    "retrieved": "2026-10-25",
+    "note": "Imgflip blank (caption-free) template"
+  },
+  "crop": {
+    "x": 130,
+    "y": 110,
+    "size": 330
+  },
+  "output": {
+    "width": 192,
+    "height": 192,
+    "bytes": 77394,
+    "frames": 25,
+    "frameMs": 40,
+    "quality": 80,
+    "fps": 25,
+    "still": "still.png"
+  }
+}

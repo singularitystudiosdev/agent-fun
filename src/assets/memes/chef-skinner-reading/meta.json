@@ -1,0 +1,27 @@
+{
+  "name": "Chef Skinner Reading a Letter",
+  "slug": "chef-skinner-reading",
+  "kind": "animated",
+  "source": {
+    "url": "https://imgflip.com/memetemplate/306216142/Chef-Skinner-Reading-a-Letter",
+    "media": "https://i.imgflip.com/52b9vy.mp4",
+    "imgflipTemplateId": 306216142,
+    "retrieved": "2026-10-25",
+    "note": "Imgflip blank (caption-free) template"
+  },
+  "crop": {
+    "x": 92,
+    "y": 0,
+    "size": 236
+  },
+  "output": {
+    "width": 192,
+    "height": 192,
+    "bytes": 121652,
+    "frames": 58,
+    "frameMs": 83,
+    "quality": 70,
+    "fps": 12,
+    "still": "still.png"
+  }
+}

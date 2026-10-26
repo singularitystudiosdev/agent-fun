@@ -1,0 +1,27 @@
+{
+  "name": "Oprah 'You Get A Car'",
+  "slug": "oprah-you-get-a-car",
+  "kind": "animated",
+  "source": {
+    "url": "https://imgflip.com/memetemplate/171218846/Oprah-You-Get-A-Car",
+    "media": "https://i.imgflip.com/2txtb2.mp4",
+    "imgflipTemplateId": 171218846,
+    "retrieved": "2026-10-25",
+    "note": "Imgflip blank (caption-free) template"
+  },
+  "crop": {
+    "x": 110,
+    "y": 16,
+    "size": 240
+  },
+  "output": {
+    "width": 192,
+    "height": 192,
+    "bytes": 63150,
+    "frames": 17,
+    "frameMs": 141,
+    "quality": 80,
+    "fps": 7.08,
+    "still": "still.png"
+  }
+}

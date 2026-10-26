@@ -1,0 +1,31 @@
+{
+  "note": "This app is a 1:1 replica of polymarket.com's market card; its tokens are the live site's (see src/index.css), verified by scripts/verify.mjs.",
+  "overrides": [
+    {
+      "files": [
+        "src/components/**",
+        "src/App.tsx",
+        "src/ReplicaView.tsx"
+      ],
+      "allow": [
+        "arbitrary-value"
+      ]
+    },
+    {
+      "files": [
+        "reference/**"
+      ],
+      "allow": [
+        "arbitrary-value"
+      ]
+    },
+    {
+      "files": [
+        "src/index.css"
+      ],
+      "allow": [
+        "duration-over-300ms"
+      ]
+    }
+  ]
+}

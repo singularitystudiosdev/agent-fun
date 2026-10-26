@@ -1,0 +1,25 @@
+{
+  "name": "Trade Offer",
+  "slug": "trade-offer",
+  "kind": "still",
+  "source": {
+    "url": "https://imgflip.com/memetemplate/309868304/Trade-Offer",
+    "media": "https://i.imgflip.com/54hjww.jpg",
+    "imgflipTemplateId": 309868304,
+    "retrieved": "2026-10-25",
+    "note": "Imgflip blank (caption-free) template"
+  },
+  "crop": {
+    "x": 83,
+    "y": 190,
+    "size": 440
+  },
+  "output": {
+    "width": 192,
+    "height": 192,
+    "bytes": 5736,
+    "frames": 1,
+    "quality": 86,
+    "still": null
+  }
+}

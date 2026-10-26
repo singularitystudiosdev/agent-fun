@@ -1,0 +1,27 @@
+{
+  "name": "Confused Math Lady",
+  "slug": "confused-math-lady",
+  "kind": "animated",
+  "source": {
+    "url": "https://imgflip.com/memetemplate/286126573/Confused-Math-Lady",
+    "media": "https://i.imgflip.com/4qcood.mp4",
+    "imgflipTemplateId": 286126573,
+    "retrieved": "2026-10-25",
+    "note": "Imgflip blank (caption-free) template"
+  },
+  "crop": {
+    "x": 40,
+    "y": 0,
+    "size": 140
+  },
+  "output": {
+    "width": 192,
+    "height": 192,
+    "bytes": 117008,
+    "frames": 50,
+    "frameMs": 100,
+    "quality": 80,
+    "fps": 10,
+    "still": "still.png"
+  }
+}

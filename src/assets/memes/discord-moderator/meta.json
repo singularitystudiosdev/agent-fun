@@ -1,0 +1,27 @@
+{
+  "name": "Discord Moderator",
+  "slug": "discord-moderator",
+  "kind": "animated",
+  "source": {
+    "url": "https://imgflip.com/memetemplate/288244599/Discord-Moderator",
+    "media": "https://i.imgflip.com/4rm2yf.mp4",
+    "imgflipTemplateId": 288244599,
+    "retrieved": "2026-10-25",
+    "note": "Imgflip blank (caption-free) template"
+  },
+  "crop": {
+    "x": 16,
+    "y": 0,
+    "size": 330
+  },
+  "output": {
+    "width": 192,
+    "height": 192,
+    "bytes": 73750,
+    "frames": 49,
+    "frameMs": 67,
+    "quality": 80,
+    "fps": 15,
+    "still": "still.png"
+  }
+}
