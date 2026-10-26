@@ -22,8 +22,10 @@ const {
   isBoardSort,
   isRefined,
   MIN_REWARD_OPTIONS,
+  recentSubmissions,
   SORT_OPTIONS,
   sortBounties,
+  topPrize,
   tabDefaultSort,
 } = await import('../src/lib/boardFilters.ts');
 const { BOARD_TABS, selectBounties } = await import('../src/lib/boardTabs.ts');
@@ -133,24 +135,33 @@ test('readSavedIds reads only bounty bookmarks set to "1"', () => {
   assert.deepEqual([...readSavedIds(undefined)], []);
 });
 
+// A submission `hoursAgo` before NOW.
+const sub = (hoursAgo: number) => ({ hunter: 'h', createdAt: new Date(NOW - hoursAgo * H).toISOString() });
+
 // Sort keys deliberately collide so every tie-break is exercised: p/q tie on everything but id; r/s tie on submissions and reward.
+// r and t split their reward into placements (first prize 7,000 and 6,000); t and s have submissions inside the last 24h.
 const SORTABLE: BoardBounty[] = [
   make('q', { rewardAmount: 5_000, submissionCount: 10, publishedAt: new Date(NOW - 5 * H).toISOString(), deadline: new Date(NOW + 50 * H).toISOString() }),
-  make('r', { rewardAmount: 8_000, submissionCount: 30, publishedAt: new Date(NOW - 2 * H).toISOString(), deadline: new Date(NOW + 20 * H).toISOString() }),
+  make('r', { rewardAmount: 8_000, rewards: { '1': 7_000, '2': 1_000 }, submissionCount: 30, publishedAt: new Date(NOW - 2 * H).toISOString(), deadline: new Date(NOW + 20 * H).toISOString() }),
   make('p', { rewardAmount: 5_000, submissionCount: 10, publishedAt: new Date(NOW - 5 * H).toISOString(), deadline: new Date(NOW + 50 * H).toISOString() }),
-  make('t', { rewardAmount: 12_000, submissionCount: 3, publishedAt: new Date(NOW - 9 * H).toISOString(), deadline: new Date(NOW + 90 * H).toISOString() }),
-  make('s', { rewardAmount: 8_000, submissionCount: 30, publishedAt: new Date(NOW - 1 * H).toISOString(), deadline: new Date(NOW + 70 * H).toISOString() }),
+  make('t', { rewardAmount: 12_000, rewards: { '1': 6_000, '2': 4_000, '3': 2_000 }, submissionCount: 3, submissions: [sub(1), sub(5), sub(23)], publishedAt: new Date(NOW - 9 * H).toISOString(), deadline: new Date(NOW + 90 * H).toISOString() }),
+  make('s', { rewardAmount: 8_000, submissionCount: 30, submissions: [sub(2), sub(30), sub(48)], publishedAt: new Date(NOW - 1 * H).toISOString(), deadline: new Date(NOW + 70 * H).toISOString() }),
 ];
 
-test('SORT_OPTIONS: five sorts in display order', () => {
+test('SORT_OPTIONS: ten sorts in display order, each next to its reverse', () => {
   assert.deepEqual(
     SORT_OPTIONS.map((o) => [o.value, o.label]),
     [
       ['reward', 'Highest reward'],
+      ['lowest', 'Lowest reward'],
+      ['prize', 'Biggest first prize'],
       ['submissions', 'Most submissions'],
-      ['newest', 'Newest'],
-      ['ending', 'Ending soon'],
       ['fewest', 'Fewest submissions'],
+      ['active', 'Most active (24h)'],
+      ['newest', 'Newest'],
+      ['oldest', 'Oldest'],
+      ['ending', 'Ending soon'],
+      ['time-left', 'Most time left'],
     ],
   );
   for (const o of SORT_OPTIONS) assert.equal(isBoardSort(o.value), true, o.value);
@@ -159,14 +170,28 @@ test('SORT_OPTIONS: five sorts in display order', () => {
 });
 
 test('sortBounties orders by each sort; ties break by reward desc, then deadline, then id', () => {
-  const by = (sort: Parameters<typeof sortBounties>[1]) => ids(sortBounties(SORTABLE, sort));
+  const by = (sort: Parameters<typeof sortBounties>[1]) => ids(sortBounties(SORTABLE, sort, NOW));
   // r and s tie on reward: r has the nearer deadline. p and q tie on everything: id asc.
   assert.deepEqual(by('reward'), ['t', 'r', 's', 'p', 'q']);
+  assert.deepEqual(by('lowest'), ['p', 'q', 'r', 's', 't']);
+  // First prize: s pays its whole 8,000 to one winner, r's first place is 7,000, t's is 6,000.
+  assert.deepEqual(by('prize'), ['s', 'r', 't', 'p', 'q']);
   // r and s tie on submissions and reward: nearer deadline (r) first.
   assert.deepEqual(by('submissions'), ['r', 's', 'p', 'q', 't']);
-  assert.deepEqual(by('newest'), ['s', 'r', 'p', 'q', 't']);
-  assert.deepEqual(by('ending'), ['r', 'p', 'q', 's', 't']);
   assert.deepEqual(by('fewest'), ['t', 'p', 'q', 'r', 's']);
+  // Last 24h: t has 3, s has 1 (its other two are older), the rest none and fall back to reward desc.
+  assert.deepEqual(by('active'), ['t', 's', 'r', 'p', 'q']);
+  assert.deepEqual(by('newest'), ['s', 'r', 'p', 'q', 't']);
+  assert.deepEqual(by('oldest'), ['t', 'p', 'q', 'r', 's']);
+  assert.deepEqual(by('ending'), ['r', 'p', 'q', 's', 't']);
+  assert.deepEqual(by('time-left'), ['t', 's', 'p', 'q', 'r']);
+});
+
+test('topPrize and recentSubmissions', () => {
+  const [q, r, , t, s] = SORTABLE;
+  assert.deepEqual([q, r, t, s].map(topPrize), [5_000, 7_000, 6_000, 8_000]);
+  assert.deepEqual([q, t, s].map((b) => recentSubmissions(b, NOW)), [0, 3, 1]);
+  assert.equal(recentSubmissions(make('future', { submissions: [sub(-1)] }), NOW), 0, 'a submission after now does not count');
 });
 
 test('sortBounties: tie on the primary key falls back to reward desc', () => {
@@ -174,7 +199,9 @@ test('sortBounties: tie on the primary key falls back to reward desc', () => {
     make('lo', { rewardAmount: 1_000, submissionCount: 7, publishedAt: new Date(NOW - H).toISOString() }),
     make('hi', { rewardAmount: 9_000, submissionCount: 7, publishedAt: new Date(NOW - H).toISOString() }),
   ];
-  for (const sort of ['submissions', 'newest', 'ending', 'fewest'] as const) assert.deepEqual(ids(sortBounties(tied, sort)), ['hi', 'lo'], sort);
+  for (const sort of ['submissions', 'fewest', 'active', 'newest', 'oldest', 'ending', 'time-left'] as const) {
+    assert.deepEqual(ids(sortBounties(tied, sort, NOW)), ['hi', 'lo'], sort);
+  }
 });
 
 test('sortBounties is deterministic and pure', () => {

@@ -156,12 +156,70 @@ function BoxingGloveIcon() {
   );
 }
 
+/** TrendUpIcon mirrored top to bottom: the same arrow heading down. */
+function TrendDownIcon() {
+  return (
+    <svg {...ICON_18}>
+      <g transform="matrix(1 0 0 -1 0 18)">
+        <path {...STROKE_18} d="M1.75,12.25l3.646-3.646c.195-.195,.512-.195,.707,0l3.293,3.293c.195,.195,.512,.195,.707,0l6.146-6.146" />
+        <polyline {...STROKE_18} points="11.25 5.75 16.25 5.75 16.25 10.75" />
+      </g>
+    </svg>
+  );
+}
+
+/** IconTrophyOutline18 (polymarket's Leaderboard nav icon). */
+function TrophyIcon() {
+  return (
+    <svg {...ICON_18}>
+      <path {...STROKE_18} d="M9.5 11.75C9.5 11.75 9.5 14.688 13.25 15.75H4.75C8.5 14.688 8.5 11.75 8.5 11.75" />
+      <path {...STROKE_18} d="M5.286 9C1.469 9 1.74999 3.75 1.74999 3.75H4.42949" />
+      <path {...STROKE_18} d="M12.714 9C16.532 9 16.25 3.75 16.25 3.75H13.5705" />
+      <path {...STROKE_18} d="M13.75 2.25C13.1562 8.159 11.583 11.4958 9.23749 11.75H8.76251C6.41701 11.4958 4.8438 8.159 4.25 2.25H13.75Z" />
+    </svg>
+  );
+}
+
+/** IconChartActivityOutline18 (polymarket's Activity nav icon). */
+function ActivityIcon() {
+  return (
+    <svg {...ICON_18}>
+      <polyline {...STROKE_18} points="2 14 5 10.75 6 13.25 10 6.75 12 12.25 16 4" />
+    </svg>
+  );
+}
+
+/** lucide rotate-ccw-clock ("history"); polymarket has no oldest-first icon. Its 2px stroke on a 24 grid matches 1.5 on 18. */
+function HistoryIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path {...STROKE_18} strokeWidth={2} d="M3 12a9 9 0 1 0 9-9a9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path {...STROKE_18} strokeWidth={2} d="M3 3v5h5m4-1v5l4 2" />
+    </svg>
+  );
+}
+
+/** IconClockOutline18: the whole dial, against Ending soon's half-dotted one. */
+function ClockIcon() {
+  return (
+    <svg {...ICON_18}>
+      <circle {...STROKE_18} cx="9" cy="9" r="7.25" />
+      <polyline {...STROKE_18} points="9 4.75 9 9 12.25 11.25" />
+    </svg>
+  );
+}
+
 const SORT_ICONS: Record<BoardSort, ReactNode> = {
   reward: <TrendUpIcon />,
+  lowest: <TrendDownIcon />,
+  prize: <TrophyIcon />,
   submissions: <FlameIcon />,
-  newest: <ShapesIcon />,
-  ending: <DottedClockIcon />,
   fewest: <BoxingGloveIcon />,
+  active: <ActivityIcon />,
+  newest: <ShapesIcon />,
+  oldest: <HistoryIcon />,
+  ending: <DottedClockIcon />,
+  'time-left': <ClockIcon />,
 };
 const SORT_MENU_OPTIONS = SORT_OPTIONS.map((o) => ({ ...o, icon: SORT_ICONS[o.value] }));
 

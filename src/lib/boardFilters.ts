@@ -96,35 +96,72 @@ export function applyBoardFilters<T extends BoardBounty>(
 }
 
 /** The sort dropdown's orders. */
-export type BoardSort = 'reward' | 'submissions' | 'newest' | 'ending' | 'fewest';
+export type BoardSort = 'reward' | 'lowest' | 'prize' | 'submissions' | 'fewest' | 'active' | 'newest' | 'oldest' | 'ending' | 'time-left';
 
-/** The sort dropdown's choices, in display order. */
-
+/** The sort dropdown's choices, in display order: each key next to its reverse. */
 export const SORT_OPTIONS: readonly { value: BoardSort; label: string }[] = [
   { value: 'reward', label: 'Highest reward' },
+  { value: 'lowest', label: 'Lowest reward' },
+  { value: 'prize', label: 'Biggest first prize' },
   { value: 'submissions', label: 'Most submissions' },
-  { value: 'newest', label: 'Newest' },
-  { value: 'ending', label: 'Ending soon' },
   { value: 'fewest', label: 'Fewest submissions' },
+  { value: 'active', label: 'Most active (24h)' },
+  { value: 'newest', label: 'Newest' },
+  { value: 'oldest', label: 'Oldest' },
+  { value: 'ending', label: 'Ending soon' },
+  { value: 'time-left', label: 'Most time left' },
 ];
 
 export const isBoardSort = (s: string | null | undefined): s is BoardSort => SORT_OPTIONS.some((o) => o.value === s);
 
-const PRIMARY: Record<BoardSort, (a: BoardBounty, b: BoardBounty) => number> = {
-  reward: (a, b) => b.rewardAmount - a.rewardAmount,
-  submissions: (a, b) => b.submissionCount - a.submissionCount,
-  newest: (a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt),
-  ending: (a, b) => Date.parse(a.deadline) - Date.parse(b.deadline),
-  fewest: (a, b) => a.submissionCount - b.submissionCount,
-};
+/** First place's prize: the largest placement, or the whole reward when the bounty has one winner. */
+export const topPrize = (b: BoardBounty): number => Math.max(0, ...Object.values(b.rewards ?? {})) || b.rewardAmount;
+
+/** Submissions made in the 24 hours up to `now` (the "24hr volume" of a bounty). */
+export const recentSubmissions = (b: BoardBounty, now: number): number =>
+  (b.submissions ?? []).filter((s) => {
+    const at = Date.parse(s.createdAt);
+    return at <= now && now - at <= 24 * HOUR;
+  }).length;
+
+type Compare<T> = (a: T, b: T) => number;
+const at = (iso: string) => Date.parse(iso);
+
+function primaryOrder<T extends BoardBounty>(sort: BoardSort, list: readonly T[], now: number): Compare<T> {
+  switch (sort) {
+    case 'reward':
+      return (a, b) => b.rewardAmount - a.rewardAmount;
+    case 'lowest':
+      return (a, b) => a.rewardAmount - b.rewardAmount;
+    case 'prize':
+      return (a, b) => topPrize(b) - topPrize(a);
+    case 'submissions':
+      return (a, b) => b.submissionCount - a.submissionCount;
+    case 'fewest':
+      return (a, b) => a.submissionCount - b.submissionCount;
+    case 'active': {
+      const recent = new Map(list.map((b) => [b, recentSubmissions(b, now)]));
+      return (a, b) => (recent.get(b) ?? 0) - (recent.get(a) ?? 0);
+    }
+    case 'newest':
+      return (a, b) => at(b.publishedAt) - at(a.publishedAt);
+    case 'oldest':
+      return (a, b) => at(a.publishedAt) - at(b.publishedAt);
+    case 'ending':
+      return (a, b) => at(a.deadline) - at(b.deadline);
+    case 'time-left':
+      return (a, b) => at(b.deadline) - at(a.deadline);
+  }
+}
 
 /**
  * A new array in `sort` order. Ties break by `byRewardDesc` (reward desc, then nearest deadline: the order
  * BOARD_BOUNTIES and the tabs already use), then id asc, so the result never depends on the incoming order.
  * A tab's default sort (`tabDefaultSort`) reproduces that tab's own order, so the default never changes what a tab shows.
+ * `now` anchors "Most active (24h)".
  */
-export function sortBounties<T extends BoardBounty>(list: readonly T[], sort: BoardSort): T[] {
-  const primary = PRIMARY[sort];
+export function sortBounties<T extends BoardBounty>(list: readonly T[], sort: BoardSort, now: number = Date.now()): T[] {
+  const primary = primaryOrder(sort, list, now);
   return [...list].sort((a, b) => primary(a, b) || byRewardDesc(a, b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
