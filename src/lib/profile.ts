@@ -19,7 +19,7 @@ export const BIO_MAX = 160;
 export const MAX_STORED_ENTRIES = 200;
 /** Form entry: pending until +60 s. */
 export const VERIFY_PENDING_MS = 60_000;
-/** Verifying until +5 min, then passed (score = selfScore) if selfScore exists. */
+/** Verifying until +5 min, then passed: score = selfScore, or the verifier's score (verifierScore) when the Result field was left blank. */
 export const VERIFY_DONE_MS = 300_000;
 /** Seed passed entries were scored 47 min after submission. */
 export const SEED_VERIFIED_AFTER_MS = 47 * 60_000;
@@ -100,7 +100,14 @@ export interface PastResult {
   payout: number;
   /** ISO. */
   endedAt: string;
+  /** Set on a board bounty that ended with your entries on it (endedBoardResults): the bounty page it links to. */
+  slug?: string;
+  /** True when none of your entries was scored by the deadline: no final rank, no payout. */
+  unscored?: boolean;
 }
+
+/** A board bounty whose deadline passed, as a past result. */
+export type EndedBoardResult = PastResult & { slug: string };
 
 export interface LeaderRow {
   hunter: string;
@@ -140,13 +147,13 @@ export interface ProfileStats {
   prizesOnTrack: number;
   /** Max PastResult.payout. */
   biggestWin: number;
-  /** Distinct active slugs on the board + past results. */
+  /** Distinct active slugs (board bounties still open) + ended results. */
   entered: number;
-  /** Sum of payouts. */
+  /** Sum of payouts over ended results (seeded past results and ended board bounties). */
   totalEarned: number;
-  /** Lowest finalRank; ties go to the larger field. */
+  /** Lowest finalRank over scored ended results; ties go to the larger field. */
   bestFinish: { rank: number; of: number } | null;
-  /** Past results with finalRank <= 3. */
+  /** Scored ended results with finalRank <= 3. */
   podiums: number;
   /** finalRank === 1. */
   wins: number;
@@ -442,18 +449,25 @@ export function recordEntry(entry: StoredEntry, storage: KeyValueStore | undefin
 }
 
 /* ---------- status timeline and merge ---------- */
-/** Effective status of a stored entry at `now`: pending < 60 s, verifying < 5 min, then passed with score = selfScore (or verifying forever without one). */
-export function resolveEntry(e: StoredEntry, now: number): Entry {
+/**
+ * Effective status of a stored entry at `now`: pending < 60 s, verifying < 5 min, then passed. The score is the
+ * self-reported one; with none, the verifier scores it (verifierScore against `bounty`). Without a bounty, or on a
+ * bounty with no scored field to place it in, a blank-score entry stays verifying.
+ */
+export function resolveEntry(e: StoredEntry, now: number, bounty?: BoardBounty): Entry {
   const submitted = Date.parse(e.submittedAt);
   const age = now - submitted;
   if (age < VERIFY_PENDING_MS) return { ...e, status: 'pending', seed: false };
-  if (age < VERIFY_DONE_MS || e.selfScore === undefined || !Number.isFinite(e.selfScore)) return { ...e, status: 'verifying', seed: false };
-  return { ...e, status: 'passed', score: e.selfScore, verifiedAt: iso(submitted + VERIFY_DONE_MS), seed: false };
+  if (age < VERIFY_DONE_MS) return { ...e, status: 'verifying', seed: false };
+  const score = e.selfScore !== undefined && Number.isFinite(e.selfScore) ? e.selfScore : bounty ? verifierScore(e.id, bounty) : undefined;
+  if (score === undefined) return { ...e, status: 'verifying', seed: false };
+  return { ...e, status: 'passed', score, verifiedAt: iso(submitted + VERIFY_DONE_MS), seed: false };
 }
 
-/** Seeds plus resolved stored entries, oldest first. */
-export function allEntries(stored: StoredEntry[], now: number, loadedAt: number = PROFILE_LOAD): Entry[] {
-  return [...seedEntries(loadedAt), ...stored.map((e) => resolveEntry(e, now))].sort(byOldest);
+/** Seeds plus resolved stored entries (each against its board bounty, looked up by slug), oldest first. */
+export function allEntries(stored: StoredEntry[], now: number, loadedAt: number = PROFILE_LOAD, bounties: BoardBounty[] = BOARD_BOUNTIES): Entry[] {
+  const bySlug = new Map(bounties.map((b) => [b.slug, b]));
+  return [...seedEntries(loadedAt), ...stored.map((e) => resolveEntry(e, now, bySlug.get(e.bountySlug)))].sort(byOldest);
 }
 
 /** A Submission built from one of your entries; `selfScore` rides along so rankOf can project an inflight entry. */
@@ -521,6 +535,20 @@ export function rankOf(bounty: BoardBounty, handle: string, extra: Submission[] 
   const projected = leaderboard(bounty, [...extra, { hunter: handle, createdAt: chosen.createdAt, status: 'passed', score: chosen.selfScore }]);
   const projectedRank = projected.find((r) => r.hunter === handle)?.rank;
   return { kind: 'inflight', status, selfScore: chosen.selfScore, projectedRank, of, entries };
+}
+
+/** The verifier's score for an entry submitted with a blank Result: fnv1a(id) picks a percentile in 30..90 of the bounty's passed scores (oriented so 90 is the better end), linearly interpolated and rounded to scoreDecimals. Undefined when the bounty has no scored field. */
+export function verifierScore(id: string, bounty: BoardBounty): number | undefined {
+  const scores = bounty.submissions.filter(isScored).map((s) => s.score);
+  if (!scores.length) return undefined;
+  const lowerWins = bounty.resolution.metric?.better === 'lower';
+  scores.sort((a, b) => (lowerWins ? b - a : a - b)); // worst first, best last
+  const p = 0.3 + (fnv1a(id) % 6001) / 10_000; // 0.3000..0.9000
+  const at = p * (scores.length - 1);
+  const lo = Math.floor(at);
+  const hi = Math.min(scores.length - 1, lo + 1);
+  const v = scores[lo] + (scores[hi] - scores[lo]) * (at - lo);
+  return Number(v.toFixed(scoreDecimals(bounty)));
 }
 
 /** USD the rank pays now: bounty.rewards[String(rank)] ?? 0. */
@@ -601,32 +629,94 @@ export function ordinal(n: number): string {
 }
 
 /* ---------- stats, earnings, activity ---------- */
-/** The identity card's numbers, from entries on boards that still list them plus past results. */
-export function profileStats(entries: Entry[], past: PastResult[], handle: string, bounties: BoardBounty[] = BOARD_BOUNTIES): ProfileStats {
+const FALLBACK_METRIC: PastResult['metric'] = { name: 'Score', unit: '', better: 'higher' };
+
+/** Stands in for your handle where only the ranking matters (activity): '@' keeps it off every board hunter's name. */
+const SELF = '@you';
+
+/** True while the board bounty still takes entries at `now`. */
+const isOpen = (bounty: BoardBounty, now: number) => Date.parse(bounty.deadline) > now;
+
+/**
+ * Your entered board bounties whose deadline has passed at `now`, as past results (id = slug). Final standing is
+ * rankOf at the deadline: the field's submissions and your entries made by then (an in-time entry the verifier scores
+ * afterwards still counts). fieldSize is that leaderboard's length, payout prizeFor(rank), endedAt the deadline. With
+ * no entry of yours scored by the deadline the row is `unscored`: finalRank fieldSize + 1, no payout.
+ */
+export function endedBoardResults(entries: Entry[], handle: string, now: number, bounties: BoardBounty[] = BOARD_BOUNTIES): EndedBoardResult[] {
   const bySlug = new Map(bounties.map((b) => [b.slug, b]));
-  const activeSlugs = [...new Set(entries.map((e) => e.bountySlug))].filter((slug) => bySlug.has(slug));
+  const out: EndedBoardResult[] = [];
+  for (const slug of new Set(entries.map((e) => e.bountySlug))) {
+    const bounty = bySlug.get(slug);
+    if (!bounty || isOpen(bounty, now)) continue;
+    const end = Date.parse(bounty.deadline);
+    const atEnd: BoardBounty = { ...bounty, submissions: bounty.submissions.filter((s) => Date.parse(s.createdAt) <= end) };
+    const mine = toSubmissions(entries.filter((e) => Date.parse(e.submittedAt) <= end), slug, handle);
+    const standing = rankOf(atEnd, handle, mine);
+    if (standing.kind === 'none') continue; // every entry came after the close
+    const base = {
+      id: slug,
+      slug,
+      title: bounty.title,
+      category: bounty.category,
+      metric: bounty.resolution.metric ? { ...bounty.resolution.metric } : { ...FALLBACK_METRIC },
+      dp: scoreDecimals(bounty),
+      rewardAmount: bounty.rewardAmount,
+      endedAt: iso(end),
+    };
+    if (standing.kind === 'ranked') {
+      out.push({ ...base, score: standing.score, firstScore: standing.leader.score, finalRank: standing.rank, fieldSize: standing.of, payout: prizeFor(bounty, standing.rank) });
+    } else {
+      const field = leaderboard(atEnd, mine);
+      const self = standing.kind === 'inflight' ? standing.selfScore : undefined;
+      out.push({ ...base, score: self ?? 0, firstScore: field[0]?.score ?? 0, finalRank: field.length + 1, fieldSize: field.length, payout: 0, unscored: true });
+    }
+  }
+  return out.sort((a, b) => Date.parse(b.endedAt) - Date.parse(a.endedAt));
+}
+
+/** `past` plus `extra`, one row per id (`past` wins): callers may pass rows that already include the ended board results. */
+export function mergeEnded(past: PastResult[], extra: PastResult[]): PastResult[] {
+  if (!extra.length) return past;
+  const ids = new Set(past.map((p) => p.id));
+  return [...past, ...extra.filter((p) => !ids.has(p.id))];
+}
+
+/**
+ * The identity card's numbers: entries on board bounties still open, plus ended results (`past` and your board
+ * bounties whose deadline passed by `now`).
+ */
+export function profileStats(entries: Entry[], past: PastResult[], handle: string, bounties: BoardBounty[] = BOARD_BOUNTIES, now: number = Date.now()): ProfileStats {
+  const bySlug = new Map(bounties.map((b) => [b.slug, b]));
+  const activeSlugs = [...new Set(entries.map((e) => e.bountySlug))].filter((slug) => {
+    const b = bySlug.get(slug);
+    return b !== undefined && isOpen(b, now);
+  });
   let prizesOnTrack = 0;
   for (const slug of activeSlugs) {
     const bounty = bySlug.get(slug)!;
     const s = rankOf(bounty, handle, toSubmissions(entries, slug, handle));
     if (s.kind === 'ranked') prizesOnTrack += s.prize;
   }
+  const ended = mergeEnded(past, endedBoardResults(entries, handle, now, bounties));
+  const scored = ended.filter((p) => !p.unscored);
   let bestFinish: ProfileStats['bestFinish'] = null;
-  for (const p of past) {
+  for (const p of scored) {
     if (!bestFinish || p.finalRank < bestFinish.rank || (p.finalRank === bestFinish.rank && p.fieldSize > bestFinish.of)) {
       bestFinish = { rank: p.finalRank, of: p.fieldSize };
     }
   }
   return {
     prizesOnTrack,
-    biggestWin: past.reduce((m, p) => Math.max(m, p.payout), 0),
-    entered: activeSlugs.length + past.length,
-    totalEarned: past.reduce((sum, p) => sum + p.payout, 0),
+    biggestWin: ended.reduce((m, p) => Math.max(m, p.payout), 0),
+    entered: activeSlugs.length + ended.length,
+    // Paid, not just won: the same 3-day payout delay as the Earnings chart and the Activity "paid" rows, so all three agree.
+    totalEarned: ended.reduce((sum, p) => sum + (paidAt(p) <= now ? p.payout : 0), 0),
     bestFinish,
-    podiums: past.filter((p) => p.finalRank <= 3).length,
-    wins: past.filter((p) => p.finalRank === 1).length,
+    podiums: scored.filter((p) => p.finalRank <= 3).length,
+    wins: scored.filter((p) => p.finalRank === 1).length,
     activeCount: activeSlugs.length,
-    endedCount: past.length,
+    endedCount: ended.length,
   };
 }
 
@@ -634,9 +724,12 @@ const paidAt = (p: PastResult) => Date.parse(p.endedAt) + PAID_AFTER_DAYS * DAY;
 
 const RANGE_LABEL: Record<EarningsRange, EarningsSeries['label']> = { '1M': 'Past month', '3M': 'Past 3 months', ALL: 'All time' };
 
-/** Cumulative payouts (paid at endedAt + 3 d) inside the range: 1M = 30 d, 3M = 90 d, ALL = since joinedAt. Points start with (start, cum before start), end with (now, final). */
-export function earningsSeries(past: PastResult[], range: EarningsRange, now: number, joinedAt: string): EarningsSeries {
-  const payouts = past
+/**
+ * Cumulative payouts (paid at endedAt + 3 d) inside the range: 1M = 30 d, 3M = 90 d, ALL = since joinedAt. Points start
+ * with (start, cum before start), end with (now, final). `ended` adds rows such as endedBoardResults (deduped by id).
+ */
+export function earningsSeries(past: PastResult[], range: EarningsRange, now: number, joinedAt: string, ended: PastResult[] = []): EarningsSeries {
+  const payouts = mergeEnded(past, ended)
     .filter((p) => p.payout > 0)
     .map((p) => ({ t: paidAt(p), amount: p.payout }))
     .filter((p) => p.t <= now)
@@ -662,8 +755,12 @@ export function earningsSeries(past: PastResult[], range: EarningsRange, now: nu
   return { total: cum - before, label: RANGE_LABEL[range], start, end: now, points };
 }
 
-/** submitted (each entry, value = receipt id), scored (passed, value = formatted score), finished (each past, value "#k of N"), paid (payout > 0, value "+$6,000", positive). Newest first. */
-export function activity(entries: Entry[], past: PastResult[], bounties: BoardBounty[] = BOARD_BOUNTIES): ActivityItem[] {
+/**
+ * submitted (each entry, value = receipt id), scored (passed, value = formatted score), finished (each ended result,
+ * value "#k of N", or "Not ranked"; a board bounty's carries its slug), paid (payout > 0 and landed by `now`, value
+ * "+$6,000", positive). Ended results are `past` plus your board bounties whose deadline passed by `now`. Newest first.
+ */
+export function activity(entries: Entry[], past: PastResult[], bounties: BoardBounty[] = BOARD_BOUNTIES, now: number = Date.now()): ActivityItem[] {
   const bySlug = new Map(bounties.map((b) => [b.slug, b]));
   const items: ActivityItem[] = [];
   for (const e of entries) {
@@ -677,12 +774,12 @@ export function activity(entries: Entry[], past: PastResult[], bounties: BoardBo
       items.push({ id: `scored:${e.id}`, kind: 'scored', title, slug, at, value });
     }
   }
-  const now = Date.now();
-  for (const p of past) {
-    items.push({ id: `finished:${p.id}`, kind: 'finished', title: p.title, at: p.endedAt, value: `#${p.finalRank} of ${p.fieldSize}` });
+  for (const p of mergeEnded(past, endedBoardResults(entries, SELF, now, bounties))) {
+    const value = p.unscored ? 'Not ranked' : `#${p.finalRank} of ${p.fieldSize}`;
+    items.push({ id: `finished:${p.id}`, kind: 'finished', title: p.title, slug: p.slug, at: p.endedAt, value });
     const paid = paidAt(p);
     if (p.payout > 0 && paid <= now) {
-      items.push({ id: `paid:${p.id}`, kind: 'paid', title: p.title, at: iso(paid), value: `+${formatBountyAmount(p.payout)}`, positive: true });
+      items.push({ id: `paid:${p.id}`, kind: 'paid', title: p.title, slug: p.slug, at: iso(paid), value: `+${formatBountyAmount(p.payout)}`, positive: true });
     }
   }
   return items.sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));

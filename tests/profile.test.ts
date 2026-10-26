@@ -20,6 +20,7 @@ const {
   readProfile, writeProfile, readStoredEntries, recordEntry, validateProfile, isHandleTaken,
   seedEntries, pastResults, resolveEntry, allEntries, toSubmissions, leaderboard, rankOf, prizeFor, standingCopy,
   scoreDecimals, formatScore, formatTimeLeft, ordinal, profileStats, earningsSeries, activity, pfpGradient, coverCrop,
+  verifierScore, endedBoardResults, mergeEnded,
 } = P;
 
 type Bounty = (typeof BOARD_BOUNTIES)[number];
@@ -225,7 +226,7 @@ test('U1.7 stream invariance: 20 pending stream submissions leave every seed sta
   }
 });
 
-test('U1.8 status timeline: pending, verifying, passed at +5 min; no selfScore stays verifying; seeds are fixed', () => {
+test('U1.8 status timeline: pending, verifying, passed at +5 min; no selfScore is verifier-scored at +5 min; seeds are fixed', () => {
   const t0 = Date.parse('2026-10-20T12:00:00.000Z');
   const e: StoredEntry = { id: 'AF-TEST01', bountySlug: 'heads-up-poker-bb100', submittedAt: new Date(t0).toISOString(), selfScore: 3, agent: false };
   assert.equal(resolveEntry(e, t0 + 59_000).status, 'pending');
@@ -237,9 +238,22 @@ test('U1.8 status timeline: pending, verifying, passed at +5 min; no selfScore s
   assert.equal(done.verifiedAt, new Date(t0 + 300_000).toISOString());
   assert.equal(done.seed, false);
   assert.equal(resolveEntry(e, t0 + 59_000).score, undefined);
+  // A blank Result: the verifier scores it at +5 min against the bounty's field.
+  const poker = bounty('heads-up-poker-bb100');
   const noScore = { ...e, selfScore: undefined };
+  assert.equal(resolveEntry(noScore, t0 + 299_000, poker).status, 'verifying');
+  const scored = resolveEntry(noScore, t0 + 301_000, poker);
+  assert.equal(scored.status, 'passed');
+  assert.equal(scored.score, verifierScore(noScore.id, poker));
+  assert.equal(typeof scored.score, 'number');
+  assert.equal(scored.verifiedAt, new Date(t0 + 300_000).toISOString());
+  // allEntries threads the bounty in by slug.
+  assert.deepEqual(allEntries([noScore], t0 + HOUR, LOAD).find((x) => x.id === noScore.id), resolveEntry(noScore, t0 + HOUR, poker));
+  // No bounty, an unknown slug, or a bounty with no scored field: it stays verifying, as before.
   assert.equal(resolveEntry(noScore, t0 + HOUR).status, 'verifying');
   assert.equal(resolveEntry(noScore, t0 + HOUR).score, undefined);
+  assert.equal(allEntries([{ ...noScore, bountySlug: 'not-on-the-board' }], t0 + HOUR, LOAD).find((x) => x.id === noScore.id)!.status, 'verifying');
+  assert.equal(resolveEntry(noScore, t0 + HOUR, synthetic('higher', [])).status, 'verifying');
   // Seeds keep their fixed statuses at any clock.
   for (const now of [LOAD, LOAD + HOUR, LOAD + 30 * DAY]) {
     const all = allEntries([], now, LOAD);
@@ -426,4 +440,140 @@ test('U1.15 no exported string, title, bio or standingCopy output contains an em
   for (const s of seen) assert.ok(!s.includes(EM_DASH), s);
   // And the module source itself carries none.
   assert.ok(!readFileSync(new URL('../src/lib/profile.ts', import.meta.url), 'utf8').includes(EM_DASH));
+});
+
+/** The value at percentile `p` (0..1) of `scores` sorted worst first, linearly interpolated. */
+const percentile = (b: Bounty, p: number): number => {
+  const lower = b.resolution.metric?.better === 'lower';
+  const xs = b.submissions.filter((x) => x.status === 'passed' && typeof x.score === 'number').map((x) => x.score!).sort((a, c) => (lower ? c - a : a - c));
+  const at = p * (xs.length - 1);
+  const lo = Math.floor(at);
+  const hi = Math.min(xs.length - 1, lo + 1);
+  return xs[lo] + (xs[hi] - xs[lo]) * (at - lo);
+};
+
+test('U1.16 verifierScore is deterministic, inside the 30th to 90th percentile of the field (oriented by metric.better), rounded, and ranks', () => {
+  for (const slug of ['heads-up-poker-bb100', SOLANA, LOGLOSS, PERPS]) {
+    const b = bounty(slug);
+    const dp = scoreDecimals(b);
+    const half = 0.5 * 10 ** -dp + 1e-9;
+    const p30 = percentile(b, 0.3);
+    const p90 = percentile(b, 0.9);
+    const [lo, hi] = [Math.min(p30, p90), Math.max(p30, p90)];
+    const seen = new Set<number>();
+    for (let i = 0; i < 200; i++) {
+      const id = `AF-${String(i).padStart(6, '0')}`;
+      const v = verifierScore(id, b)!;
+      assert.equal(verifierScore(id, b), v, 'same id, same score');
+      assert.ok(v >= lo - half && v <= hi + half, `${slug} ${id} ${v} in [${lo}, ${hi}]`);
+      assert.equal(Number(v.toFixed(dp)), v, 'rounded to scoreDecimals');
+      seen.add(v);
+    }
+    assert.ok(seen.size > 5, `${slug} spreads over the range`);
+    // Oriented: the 90th percentile is the better end.
+    if (b.resolution.metric?.better === 'lower') assert.ok(p90 < p30, slug);
+    else assert.ok(p90 > p30, slug);
+  }
+  assert.equal(verifierScore('AF-ANY001', synthetic('higher', [])), undefined);
+
+  // A blank-score entry past +5 min ranks on the leaderboard with that score.
+  const t0 = LOAD - 10 * MIN;
+  const blank: StoredEntry = { id: 'AF-BLANK1', bountySlug: 'heads-up-poker-bb100', submittedAt: new Date(t0).toISOString(), agent: true };
+  const b = bounty(blank.bountySlug);
+  const entries = allEntries([blank], LOAD, LOAD);
+  const mine = entries.find((x) => x.id === blank.id)!;
+  assert.equal(mine.status, 'passed');
+  const standing = rankOf(b, 'me', toSubmissions(entries, b.slug, 'me'));
+  assert.equal(standing.kind, 'ranked');
+  assert.ok(standing.kind === 'ranked' && standing.score === mine.score && standing.rank >= 1 && standing.rank <= standing.of);
+  assert.match(standingCopy(standing, b).rank, /^#\d+ of \d+$/);
+});
+
+test('U1.17 endedBoardResults: past a deadline the entry leaves Active, shows in Ended with its rank and payout, and the stats move', () => {
+  const sol = bounty(SOLANA);
+  const ll = bounty(LOGLOSS);
+  const fz = bounty(FUZZ);
+  const solEnd = Date.parse(sol.deadline);
+  const llEnd = Date.parse(ll.deadline);
+  assert.ok(llEnd < solEnd && solEnd < Date.parse(fz.deadline), 'log-loss ends first, then solana, then fuzzing');
+
+  // Before any deadline nothing has ended: a fresh load keeps the spec numbers.
+  assert.deepEqual(endedBoardResults(seeds, handle, LOAD), []);
+  const fresh = profileStats(seeds, past, handle, BOARD_BOUNTIES, LOAD);
+  assert.deepEqual(fresh, profileStats(seeds, past, handle));
+  assert.equal(fresh.totalEarned, 11_500);
+
+  // Just past the log-loss deadline: #8 of 21, unplaced, no payout. Totals do not move; Active drops one.
+  const afterLl = endedBoardResults(seeds, handle, llEnd + MIN);
+  assert.equal(afterLl.length, 1);
+  assert.deepEqual(
+    { id: afterLl[0].id, slug: afterLl[0].slug, finalRank: afterLl[0].finalRank, fieldSize: afterLl[0].fieldSize, payout: afterLl[0].payout, score: afterLl[0].score, endedAt: afterLl[0].endedAt, title: afterLl[0].title },
+    { id: LOGLOSS, slug: LOGLOSS, finalRank: 8, fieldSize: 21, payout: 0, score: 0.538, endedAt: ll.deadline, title: ll.title },
+  );
+  assert.equal(afterLl[0].unscored, undefined);
+  assert.equal(afterLl[0].dp, 3);
+  assert.deepEqual(afterLl[0].metric, ll.resolution.metric);
+  const s1 = profileStats(seeds, past, handle, BOARD_BOUNTIES, llEnd + MIN);
+  assert.deepEqual(s1, { ...fresh, activeCount: 3, endedCount: 7 });
+
+  // Past the solana deadline: #1 of 16 wins its first prize, $9,000; it leaves Active and the totals move.
+  const at = solEnd + HOUR;
+  const ended = endedBoardResults(seeds, handle, at);
+  assert.deepEqual(ended.map((r) => r.id), [SOLANA, LOGLOSS], 'newest first');
+  const solRow = ended[0];
+  assert.deepEqual([solRow.finalRank, solRow.fieldSize, solRow.payout, solRow.score, solRow.firstScore, solRow.rewardAmount], [1, 16, 9000, 1.04, 1.04, sol.rewardAmount]);
+  assert.equal(solRow.payout, prizeFor(sol, 1));
+  const s2 = profileStats(seeds, past, handle, BOARD_BOUNTIES, at);
+  assert.deepEqual(s2, {
+    // Won but not yet paid (payouts land 3 days after the deadline): Total earned waits, like the Earnings chart.
+    prizesOnTrack: 4_000, biggestWin: 9_000, entered: 10, totalEarned: 11_500, bestFinish: { rank: 1, of: 64 },
+    podiums: 5, wins: 3, activeCount: 2, endedCount: 8,
+  });
+  // Rows passed in already merged are not counted twice.
+  assert.deepEqual(profileStats(seeds, mergeEnded(past, ended), handle, BOARD_BOUNTIES, at), s2);
+
+  // Earnings: the payout lands 3 days after the deadline, through the optional `ended` rows (the signature is unchanged).
+  assert.equal(earningsSeries(past, 'ALL', at, DEFAULT_PROFILE.joinedAt, ended).total, 11_500);
+  const paidNow = solEnd + 3 * DAY + HOUR;
+  const endedLater = endedBoardResults(seeds, handle, paidNow);
+  const series = earningsSeries(past, 'ALL', paidNow, DEFAULT_PROFILE.joinedAt, endedLater);
+  assert.equal(series.total, 20_500);
+  assert.equal(profileStats(seeds, past, handle, BOARD_BOUNTIES, paidNow).totalEarned, series.total, 'Total earned matches the chart once paid');
+  assert.equal(series.points.at(-2)!.t, solEnd + 3 * DAY);
+  assert.deepEqual(earningsSeries(mergeEnded(past, endedLater), 'ALL', paidNow, DEFAULT_PROFILE.joinedAt), series);
+  assert.equal(earningsSeries(past, 'ALL', paidNow, DEFAULT_PROFILE.joinedAt).total, 11_500, 'without the rows, the old behaviour');
+
+  // Activity: finished at the deadline (linking the bounty), paid 3 days later.
+  const items = activity(seeds, past, BOARD_BOUNTIES, paidNow);
+  const fin = items.find((i) => i.id === `finished:${SOLANA}`)!;
+  assert.deepEqual([fin.value, fin.slug, fin.at], ['#1 of 16', SOLANA, sol.deadline]);
+  const paid = items.find((i) => i.id === `paid:${SOLANA}`)!;
+  assert.deepEqual([paid.value, paid.slug, paid.positive], ['+$9,000', SOLANA, true]);
+  assert.equal(items.find((i) => i.id === `finished:${LOGLOSS}`)!.value, '#8 of 21');
+  assert.equal(activity(seeds, past, BOARD_BOUNTIES, at).find((i) => i.id === `paid:${SOLANA}`), undefined, 'not paid before +3 d');
+  assert.equal(activity(seeds, past, BOARD_BOUNTIES, LOAD).length, 19, 'fresh load unchanged');
+
+  // Rank at the deadline: an entry filed after the close does not count; one filed in time does.
+  const late: StoredEntry = { id: 'AF-LATE01', bountySlug: LOGLOSS, submittedAt: new Date(llEnd + MIN).toISOString(), selfScore: 0.01, agent: true };
+  const inTime: StoredEntry = { ...late, id: 'AF-INTIME', submittedAt: new Date(llEnd - 10 * MIN).toISOString() };
+  const later = llEnd + HOUR;
+  assert.equal(endedBoardResults(allEntries([late], later, LOAD), handle, later).find((r) => r.id === LOGLOSS)!.finalRank, 8);
+  const won = endedBoardResults(allEntries([inTime], later, LOAD), handle, later).find((r) => r.id === LOGLOSS)!;
+  assert.deepEqual([won.finalRank, won.payout, won.score], [1, prizeFor(ll, 1), 0.01]);
+
+  // The fuzzing seed is still verifying at its deadline: an unscored row, no payout, not a podium.
+  const fzAt = Date.parse(fz.deadline) + HOUR;
+  const fzRow = endedBoardResults(seeds, handle, fzAt).find((r) => r.id === FUZZ)!;
+  assert.equal(fzRow.unscored, true);
+  assert.equal(fzRow.payout, 0);
+  assert.ok(fzRow.finalRank > fzRow.fieldSize);
+  const s3 = profileStats(seeds, past, handle, BOARD_BOUNTIES, fzAt);
+  // Solana's $9,000 is won but lands 3 days after its deadline, still ahead of this moment: earned stays at 11,500.
+  assert.deepEqual([s3.activeCount, s3.endedCount, s3.podiums, s3.wins, s3.totalEarned], [1, 9, 5, 3, 11_500]);
+  assert.equal(profileStats(seeds, past, handle, BOARD_BOUNTIES, Date.parse(sol.deadline) + 3 * DAY).totalEarned, 20_500);
+  assert.equal(activity(seeds, past, BOARD_BOUNTIES, fzAt).find((i) => i.id === `finished:${FUZZ}`)!.value, 'Not ranked');
+
+  // Seeds and past defs are untouched.
+  assert.equal(pastResults(LOAD).length, PAST_RESULT_DEFS.length);
+  assert.equal(seedEntries(LOAD).length, SEED_ENTRY_DEFS.length);
 });

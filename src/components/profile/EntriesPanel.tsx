@@ -4,7 +4,21 @@ import { SelectMenu, type SelectMenuOption } from '../board/SelectMenu';
 import { bountyPath, formatBountyAmount, type BoardBounty } from '../../lib/bounty';
 import { BOARD_BOUNTIES } from '../../lib/bountyData';
 import { appHref } from '../../lib/paths';
-import { formatScore, formatTimeLeft, ordinal, rankOf, scoreDecimals, standingCopy, toSubmissions, type Entry, type PastResult, type Standing, type StandingCopy } from '../../lib/profile';
+import {
+  endedBoardResults,
+  formatScore,
+  formatTimeLeft,
+  mergeEnded,
+  ordinal,
+  rankOf,
+  scoreDecimals,
+  standingCopy,
+  toSubmissions,
+  type Entry,
+  type PastResult,
+  type Standing,
+  type StandingCopy,
+} from '../../lib/profile';
 import {
   CheckCircleFilledGlyph,
   CheckCircleGlyph,
@@ -25,8 +39,9 @@ import {
 
 /**
  * The Entries tab: polymarket's Positions panel for bounties. An Active | Ended toggle, a search and a sort, then
- * Active rows (one per bounty still on the board, ranked by the shared standings engine) or Ended rows (past results,
- * not links: the bounty is off the board). Active rows are the only place a bounty meme appears on the profile.
+ * Active rows (one per board bounty still open, ranked by the shared standings engine) or Ended rows: the seeded past
+ * results (medal or flag tiles, not links: those bounties are off the board) plus your board bounties whose deadline
+ * has passed (their own meme, linking to the bounty). A board bounty is in exactly one list, so no meme repeats.
  */
 
 type Status = 'active' | 'ended';
@@ -58,10 +73,13 @@ export interface ActiveRow {
   places: number;
 }
 
-/** One row per bounty you entered that the board still lists. */
-export function activeRows(entries: Entry[], handle: string, bounties: BoardBounty[] = BOARD_BOUNTIES): ActiveRow[] {
+/** One row per bounty you entered that the board still lists and whose deadline is after `now`. */
+export function activeRows(entries: Entry[], handle: string, bounties: BoardBounty[] = BOARD_BOUNTIES, now: number = Date.now()): ActiveRow[] {
   const bySlug = new Map(bounties.map((b) => [b.slug, b]));
-  const slugs = [...new Set(entries.map((e) => e.bountySlug))].filter((s) => bySlug.has(s));
+  const slugs = [...new Set(entries.map((e) => e.bountySlug))].filter((s) => {
+    const b = bySlug.get(s);
+    return b !== undefined && Date.parse(b.deadline) > now;
+  });
   return slugs.map((slug) => {
     const bounty = bySlug.get(slug)!;
     const standing = rankOf(bounty, handle, toSubmissions(entries, slug, handle));
@@ -80,10 +98,13 @@ export function sortActive(rows: ActiveRow[], sort: ActiveSort): ActiveRow[] {
   return [...rows].sort(cmp);
 }
 
+/** Unscored results (no final rank) sort after every ranked one. */
+const finalRankOf = (p: PastResult) => (p.unscored ? Number.POSITIVE_INFINITY : p.finalRank);
+
 export function sortEnded(rows: PastResult[], sort: EndedSort): PastResult[] {
   const recent = (a: PastResult, b: PastResult) => Date.parse(b.endedAt) - Date.parse(a.endedAt);
-  const cmp =
-    sort === 'payout' ? (a: PastResult, b: PastResult) => b.payout - a.payout || recent(a, b) : sort === 'rank' ? (a: PastResult, b: PastResult) => a.finalRank - b.finalRank || b.fieldSize - a.fieldSize : recent;
+  const byRank = (a: PastResult, b: PastResult) => finalRankOf(a) - finalRankOf(b) || b.fieldSize - a.fieldSize || recent(a, b);
+  const cmp = sort === 'payout' ? (a: PastResult, b: PastResult) => b.payout - a.payout || recent(a, b) : sort === 'rank' ? byRank : recent;
   return [...rows].sort(cmp);
 }
 
@@ -97,9 +118,10 @@ export function EntriesPanel({ entries, past, handle, now }: { entries: Entry[];
   const [shown, setShown] = useState(PAGE_SIZE);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const active = useMemo(() => activeRows(entries, handle), [entries, handle]);
+  const active = useMemo(() => activeRows(entries, handle, BOARD_BOUNTIES, now), [entries, handle, now]);
+  const ended = useMemo(() => mergeEnded(past, endedBoardResults(entries, handle, now)), [past, entries, handle, now]);
   const activeShown = useMemo(() => sortActive(active.filter((r) => matches(r.bounty.title, query)), activeSort), [active, query, activeSort]);
-  const endedShown = useMemo(() => sortEnded(past.filter((p) => matches(p.title, query)), endedSort), [past, query, endedSort]);
+  const endedShown = useMemo(() => sortEnded(ended.filter((p) => matches(p.title, query)), endedSort), [ended, query, endedSort]);
 
   const pick = (next: Status) => {
     setStatus(next);
@@ -114,7 +136,7 @@ export function EntriesPanel({ entries, past, handle, now }: { entries: Entry[];
     searchRef.current?.focus();
   };
 
-  const total = status === 'active' ? active.length : past.length;
+  const total = status === 'active' ? active.length : ended.length;
   const list = status === 'active' ? activeShown : endedShown;
 
   let body: ReactNode;
@@ -175,7 +197,7 @@ export function EntriesPanel({ entries, past, handle, now }: { entries: Entry[];
       <div className="flex flex-col gap-2 md:flex-row">
         <div role="group" aria-label="Entry status" className="flex h-10 shrink-0 gap-0.5 rounded-md border border-pk-border p-0.5">
           <StatusChip label="Active" count={active.length} pressed={status === 'active'} onClick={() => pick('active')} testId="profile-status-active" />
-          <StatusChip label="Ended" count={past.length} pressed={status === 'ended'} onClick={() => pick('ended')} testId="profile-status-ended" />
+          <StatusChip label="Ended" count={ended.length} pressed={status === 'ended'} onClick={() => pick('ended')} testId="profile-status-ended" />
         </div>
         <div className="flex min-w-0 flex-1 gap-2">
           <label className="flex h-10 min-w-0 flex-1 cursor-text items-center gap-1 rounded-md border border-pk-gray-200 bg-pk-surface px-2.5 transition-colors motion-reduce:transition-none hover:border-pk-gray-300 focus-within:border-pk-gray-300 focus-within:ring-2 focus-within:ring-pk-content-secondary/40">
@@ -349,7 +371,14 @@ function ActiveItem({ row, now }: { row: ActiveRow; now: number }) {
   );
 }
 
-function ResultMark({ rank }: { rank: number }) {
+function ResultMark({ rank, unscored }: { rank: number; unscored?: boolean }) {
+  if (unscored)
+    return (
+      <span className="flex items-center gap-1.5 text-body-base font-semibold text-pk-content-secondary">
+        <MinusCircleGlyph />
+        Not ranked
+      </span>
+    );
   if (rank === 1)
     return (
       <span className="flex items-center gap-1.5 text-body-base font-semibold text-pk-green-600">
@@ -373,28 +402,33 @@ function ResultMark({ rank }: { rank: number }) {
 }
 
 const MEDAL = ['text-pk-chart-3', 'text-pk-gray-400', 'text-pk-chart-4'];
+const BOARD_BY_SLUG = new Map(BOARD_BOUNTIES.map((b) => [b.slug, b]));
+const ENDED_ROW = `grid min-h-16 grid-cols-3 gap-x-3 gap-y-3 rounded-md px-3 py-3 md:items-center ${ENDED_GRID}`;
 
 function EndedItem({ result: p }: { result: PastResult }) {
-  const result = p.finalRank === 1 ? 'won' : p.finalRank <= 3 ? 'placed' : 'unplaced';
-  const score = formatScore(p.score, p.metric, p.dp);
+  const result = p.unscored ? 'unscored' : p.finalRank === 1 ? 'won' : p.finalRank <= 3 ? 'placed' : 'unplaced';
+  const score = p.unscored ? 'No score' : formatScore(p.score, p.metric, p.dp);
   const ended = `Ended ${ENDED_ON.format(new Date(p.endedAt))}`;
-  const entrants = `${p.fieldSize.toLocaleString('en-US')} entrants`;
-  return (
-    <li
-      data-testid="profile-ended-row"
-      data-id={p.id}
-      data-result={result}
-      className={`grid min-h-16 grid-cols-3 gap-x-3 gap-y-3 rounded-md px-3 py-3 odd:bg-pk-gray-100/60 md:items-center ${ENDED_GRID}`}
-    >
+  const entrants = `${p.fieldSize.toLocaleString('en-US')} ${p.fieldSize === 1 ? 'entrant' : 'entrants'}`;
+  // A board bounty that ended keeps its own meme and links back to its page; a seeded past result gets a medal or flag.
+  const bounty = p.slug ? BOARD_BY_SLUG.get(p.slug) : undefined;
+  const cells = (
+    <>
       <span className="flex min-w-0 flex-col gap-0.5">
         <CellLabel>Result</CellLabel>
-        <ResultMark rank={p.finalRank} />
+        <ResultMark rank={p.finalRank} unscored={p.unscored} />
       </span>
 
       <span className="order-first col-span-3 flex min-w-0 items-center gap-3 md:order-none md:col-span-1">
-        <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-md bg-pk-gray-100">
-          {p.finalRank <= 3 ? <MedalGlyph className={`size-6 ${MEDAL[p.finalRank - 1]}`} /> : <FlagGlyph className="size-5 text-pk-gray-500" />}
-        </span>
+        {bounty ? (
+          <span className="relative size-10 shrink-0 overflow-hidden rounded-md bg-pk-gray-100">
+            <BountyIcon bounty={bounty} size={40} />
+          </span>
+        ) : (
+          <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-md bg-pk-gray-100">
+            {p.finalRank <= 3 && !p.unscored ? <MedalGlyph className={`size-6 ${MEDAL[p.finalRank - 1]}`} /> : <FlagGlyph className="size-5 text-pk-gray-500" />}
+          </span>
+        )}
         <span className="flex min-w-0 flex-col gap-0.5">
           <span className="line-clamp-2 text-body-base font-semibold text-pk-content-primary">{p.title}</span>
           <span className={SUB}>
@@ -410,21 +444,35 @@ function EndedItem({ result: p }: { result: PastResult }) {
 
       <span className={CELL}>
         <CellLabel>Final rank</CellLabel>
-        <span className={VALUE}>
-          #{p.finalRank} of {p.fieldSize.toLocaleString('en-US')}
+        <span data-testid="profile-ended-rank" className={`${VALUE} ${p.unscored ? 'text-pk-content-secondary' : ''}`}>
+          {p.unscored ? 'Not ranked' : `#${p.finalRank} of ${p.fieldSize.toLocaleString('en-US')}`}
         </span>
+        {p.unscored && <span className={SUB}>Not scored by the deadline</span>}
       </span>
 
       <span className={`${CELL} hidden md:flex`}>
         <CellLabel>Your score</CellLabel>
-        <span className={VALUE}>{score}</span>
-        {p.finalRank > 1 && <span className={SUB}>1st: {formatScore(p.firstScore, p.metric, p.dp)}</span>}
+        <span className={`${VALUE} ${p.unscored ? 'text-pk-content-secondary' : ''}`}>{score}</span>
+        {p.finalRank > 1 && p.fieldSize > 0 && <span className={SUB}>1st: {formatScore(p.firstScore, p.metric, p.dp)}</span>}
       </span>
 
       <span className={CELL}>
         <CellLabel>Payout</CellLabel>
-        <span className={`${VALUE} ${p.payout > 0 ? 'text-pk-green-600' : 'text-pk-content-secondary'}`}>{p.payout > 0 ? `+${formatBountyAmount(p.payout)}` : formatBountyAmount(0)}</span>
+        <span data-testid="profile-ended-payout" className={`${VALUE} ${p.payout > 0 ? 'text-pk-green-600' : 'text-pk-content-secondary'}`}>
+          {p.payout > 0 ? `+${formatBountyAmount(p.payout)}` : formatBountyAmount(0)}
+        </span>
       </span>
+    </>
+  );
+  return (
+    <li data-testid="profile-ended-row" data-id={p.id} data-slug={p.slug} data-result={result} data-rank={p.unscored ? undefined : p.finalRank} className="rounded-md odd:bg-pk-gray-100/60">
+      {bounty ? (
+        <a href={bountyPath(bounty.slug)} className={`${ENDED_ROW} transition-colors hover:bg-pk-gray-100 motion-reduce:transition-none ${FOCUS_RING}`}>
+          {cells}
+        </a>
+      ) : (
+        <div className={ENDED_ROW}>{cells}</div>
+      )}
     </li>
   );
 }

@@ -166,6 +166,8 @@ export function SubmissionForm({ bounty, onSubmitted, scrollMargin }: Submission
   const [shown, setShown] = useState<Set<string>>(() => new Set());
   const [submitted, setSubmitted] = useState(false);
   const [receipt, setReceipt] = useState<Submission | null>(null);
+  /** False when localStorage refused the entry (quota, storage disabled): the receipt says so instead of implying it is kept. */
+  const [saved, setSaved] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
   const receiptRef = useRef<HTMLHeadingElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -224,7 +226,7 @@ export function SubmissionForm({ bounty, onSubmitted, scrollMargin }: Submission
     const s = buildSubmission(spec, bounty.slug, values);
     // Persist it on your profile: Live submissions (via useMyEntries) and /profile pick it up from the change event.
     const selfScore = values.score.trim() ? Number(values.score.replace(/,/g, '')) : undefined;
-    recordEntry({
+    const stored = recordEntry({
       id: s.id!,
       bountySlug: bounty.slug,
       submittedAt: s.createdAt,
@@ -235,6 +237,7 @@ export function SubmissionForm({ bounty, onSubmitted, scrollMargin }: Submission
       link: s.link,
     });
     focusAfter.current = 'receipt';
+    setSaved(stored);
     setReceipt(s);
     onSubmitted?.(s);
   };
@@ -284,7 +287,7 @@ export function SubmissionForm({ bounty, onSubmitted, scrollMargin }: Submission
       </header>
 
       {receipt ? (
-        <Receipt receipt={receipt} bounty={bounty} headingRef={receiptRef} onAnother={submitAnother} />
+        <Receipt receipt={receipt} bounty={bounty} saved={saved} headingRef={receiptRef} onAnother={submitAnother} />
       ) : (
         <form ref={formRef} noValidate onSubmit={onSubmit} aria-labelledby={titleId} data-testid="submission-form-fields">
           <fieldset disabled={ended} className="min-w-0 disabled:opacity-60">
@@ -595,11 +598,13 @@ function Check({ id, checked, onChange, a11y, children }: { id: string; checked:
 function Receipt({
   receipt,
   bounty,
+  saved,
   headingRef,
   onAnother,
 }: {
   receipt: Submission;
   bounty: BoardBounty;
+  saved: boolean;
   headingRef: RefObject<HTMLHeadingElement | null>;
   onAnother: () => void;
 }) {
@@ -619,6 +624,11 @@ function Receipt({
           <p className="text-body-sm text-pk-content-secondary text-pretty">
             Submitted as @{receipt.hunter} at {time}. Keep the ID to reference this entry in the discussion.
           </p>
+          {!saved && (
+            <p className="text-body-sm font-semibold text-pk-red-500 text-pretty" data-testid="submission-save-warning">
+              This entry could not be saved in this browser, so it will not appear on your profile after a reload.
+            </p>
+          )}
         </div>
       </div>
 
@@ -662,9 +672,11 @@ function Receipt({
         <button type="button" onClick={onAnother} className={SECONDARY_BUTTON} data-testid="submission-another">
           Submit another
         </button>
-        <a href={appHref('/profile')} className={TEXT_LINK} data-testid="submission-profile-link">
-          View on your profile
-        </a>
+        {saved && (
+          <a href={appHref('/profile')} className={TEXT_LINK} data-testid="submission-profile-link">
+            View on your profile
+          </a>
+        )}
       </div>
     </div>
   );

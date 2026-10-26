@@ -73,7 +73,7 @@ export function SelectMenu<T extends string | number>({
   options: readonly SelectMenuOption<T>[];
   onChange: (next: T) => void;
   testId?: string;
-  /** Adds a typed-value field below the options. Typing applies live; Enter closes; clearing it restores the value the menu opened with. */
+  /** Adds a typed-value field below the options. Typing applies live; Enter closes (unless the text is unreadable: then the field turns red and stays open); clearing it restores the value the menu opened with. */
   custom?: SelectMenuCustom<T>;
 }) {
   const id = useId();
@@ -228,11 +228,16 @@ export function SelectMenu<T extends string | number>({
     }
   };
 
+  /** Non-empty text the field cannot read; the value stays the last one that parsed. */
+  const customInvalid = !!custom && customText.trim() !== '' && custom.parse(customText) === null;
+
   const onCustomKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     const list = items();
     switch (event.key) {
       case 'Enter':
         event.preventDefault();
+        // Text that is not a value keeps the menu open on the field (marked invalid), so the old value never sticks silently.
+        if (customInvalid) break;
         close(true);
         break;
       case 'Escape':
@@ -335,7 +340,13 @@ export function SelectMenu<T extends string | number>({
         {custom && (
           // Outside the role="menu" list (a menu holds only menu items), under a hairline: the same search-field anatomy as the board's search.
           <div className="mt-1 border-t border-pk-border pt-2">
-            <label className="flex h-10 cursor-text items-center gap-1 rounded-md border border-transparent bg-pk-gray-100 px-3 transition-colors duration-150 motion-reduce:transition-none focus-within:border-pk-gray-300 focus-within:bg-pk-surface focus-within:ring-2 focus-within:ring-pk-content-secondary/40">
+            <label
+              className={`flex h-10 cursor-text items-center gap-1 rounded-md border px-3 transition-colors duration-150 motion-reduce:transition-none focus-within:bg-pk-surface focus-within:ring-2 ${
+                customInvalid
+                  ? 'border-pk-red-500 bg-pk-surface focus-within:border-pk-red-500 focus-within:ring-pk-red-500/30'
+                  : 'border-transparent bg-pk-gray-100 focus-within:border-pk-gray-300 focus-within:ring-pk-content-secondary/40'
+              }`}
+            >
               {custom.prefix && (
                 <span aria-hidden="true" className="text-body-base font-semibold text-pk-content-secondary">
                   {custom.prefix}
@@ -348,7 +359,7 @@ export function SelectMenu<T extends string | number>({
                 autoComplete="off"
                 spellCheck={false}
                 aria-label={custom.label}
-                aria-invalid={customText.trim() !== '' && custom.parse(customText) === null}
+                aria-invalid={customInvalid}
                 placeholder={custom.placeholder}
                 value={customText}
                 data-testid={testId ? `${testId}-custom` : undefined}

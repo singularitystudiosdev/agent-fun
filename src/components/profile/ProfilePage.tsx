@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { BOARD_BOUNTIES } from '../../lib/bountyData';
-import { activity, pastResults, profileStats, PROFILE_LOAD, useEntries, useNow, useProfile } from '../../lib/profile';
+import { activity, endedBoardResults, mergeEnded, pastResults, profileStats, PROFILE_LOAD, useEntries, useNow, useProfile } from '../../lib/profile';
 import { ActivityPanel } from './ActivityPanel';
 import { EarningsCard } from './EarningsCard';
 import { EditProfileDialog } from './EditProfileDialog';
@@ -28,8 +28,10 @@ export function ProfilePage() {
   const entries = useEntries();
   const now = useNow();
   const past = useMemo(() => pastResults(PROFILE_LOAD), []);
-  const stats = useMemo(() => profileStats(entries, past, profile.handle, BOARD_BOUNTIES), [entries, past, profile.handle]);
-  const items = useMemo(() => activity(entries, past, BOARD_BOUNTIES), [entries, past]);
+  const stats = useMemo(() => profileStats(entries, past, profile.handle, BOARD_BOUNTIES, now), [entries, past, profile.handle, now]);
+  /** Board bounties you entered whose deadline has passed: they feed the Earnings chart like past results do. */
+  const ended = useMemo(() => endedBoardResults(entries, profile.handle, now), [entries, profile.handle, now]);
+  const items = useMemo(() => activity(entries, past, BOARD_BOUNTIES, now), [entries, past, now]);
 
   const [tab, setTab] = useState<Tab>('entries');
   const [editing, setEditing] = useState(editRequested);
@@ -96,7 +98,7 @@ export function ProfilePage() {
     <div data-testid="profile-page" className="mx-auto w-full max-w-[816px] px-4 pt-6 pb-16 lg:px-0">
       <div className="grid gap-4 md:grid-cols-2">
         <IdentityCard profile={profile} stats={stats} onEdit={openEdit} editRef={editRef} />
-        <EarningsCard past={past} now={now} joinedAt={profile.joinedAt} />
+        <EarningsCard past={mergeEnded(past, ended)} now={now} joinedAt={profile.joinedAt} />
       </div>
 
       <div role="tablist" aria-label="Profile sections" className="no-scrollbar mt-8 -mx-1 flex gap-5 overflow-x-auto px-1">

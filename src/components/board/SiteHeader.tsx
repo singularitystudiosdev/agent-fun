@@ -39,13 +39,6 @@ const SearchIcon = ({ className = 'size-5' }: { className?: string }) => (
   </svg>
 );
 
-const HelpIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" aria-hidden="true" className="size-5">
-    <path fill="currentColor" d="M9.791 12.567a1.001 1.001 0 0 1 0 2 1.001 1.001 0 0 1 0-2m.314-7.29c1.27 0 2.667.93 2.668 2.658 0 .605-.16 1.096-.445 1.499-.267.376-.612.626-.86.8-.535.376-.733.511-.804.912a.85.85 0 0 1-1.675-.293c.21-1.195 1.06-1.7 1.502-2.011.242-.17.368-.276.45-.392.064-.09.132-.23.132-.515 0-.612-.45-.958-.969-.958-.602 0-1.14.277-1.381.935a.85.85 0 0 1-1.596-.586c.534-1.455 1.809-2.048 2.978-2.049" />
-    <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M10 1.9a8.1 8.1 0 0 1 8.1 8.1 8.1 8.1 0 0 1-8.1 8.1A8.1 8.1 0 0 1 1.9 10 8.1 8.1 0 0 1 10 1.9m0 1.7a6.4 6.4 0 1 0 0 12.8 6.4 6.4 0 0 0 0-12.8" />
-  </svg>
-);
-
 const ChevronIcon = ({ flip = false }: { flip?: boolean }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" aria-hidden="true" className={flip ? 'size-5 rotate-180' : 'size-5'}>
     <path fill="currentColor" d="M7.714 5.214a.877.877 0 0 1 1.238 0l4.166 4.167a.875.875 0 0 1 0 1.237l-4.166 4.167a.876.876 0 0 1-1.238-1.237l3.548-3.55-3.548-3.546a.877.877 0 0 1 0-1.238" />
@@ -277,9 +270,6 @@ export function SiteHeader({
             className={`${ICON_BUTTON} lg:hidden`}
           >
             <SearchIcon />
-          </button>
-          <button type="button" aria-label="Help" className={`${ICON_BUTTON} hidden! lg:inline-flex!`}>
-            <HelpIcon />
           </button>
           <ProfileLink active={profileActive} />
         </div>
