@@ -39,43 +39,11 @@ const ChevronLeft = () => (
     <path d="m15 18-6-6 6-6" />
   </Icon>
 );
-const VerifiedGlyph = () => (
-  <Icon className="size-3.5 shrink-0 text-pk-brand-500">
-    <path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z" />
-    <path d="m9 12 2 2 4-4" />
-  </Icon>
-);
-/** The breadcrumb's middle dot, drawn as an element so it centres on the text's x-height. */
-const Dot = () => (
-  <>
-    <span aria-hidden="true" className="size-[3px] shrink-0 rounded-full bg-pk-content-tertiary" />
-    <span className="sr-only">,</span>
-  </>
-);
-
 const ordinal = (n: number): string => {
   const s = ['th', 'st', 'nd', 'rd'];
   const v = n % 100;
   return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
 };
-
-const SCORE = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
-/** "12.4%" for percent units, otherwise "1,240 ms". */
-const formatScore = (n: number, unit?: string): string => (!unit ? SCORE.format(n) : unit === '%' ? `${SCORE.format(n)}%` : `${SCORE.format(n)} ${unit}`);
-
-/** The best verified score on the bounty's leaderboard metric, per `metric.better`; null until one exists. */
-function leader(bounty: BoardBounty): { hunter: string; score: number; agent?: boolean } | null {
-  const metric = bounty.resolution?.metric;
-  if (!metric) return null;
-  const lower = metric.better === 'lower';
-  let best: { hunter: string; score: number; agent?: boolean } | null = null;
-  for (const s of bounty.submissions ?? []) {
-    const verified = s.status === 'passed' || s.status === undefined;
-    if (!verified || typeof s.score !== 'number' || !Number.isFinite(s.score)) continue;
-    if (!best || (lower ? s.score < best.score : s.score > best.score)) best = { hunter: s.hunter, score: s.score, agent: s.agent };
-  }
-  return best;
-}
 
 const safeDate = (iso: string | undefined): string | null => (iso && !Number.isNaN(Date.parse(iso)) ? formatEndedOn(iso) : null);
 
@@ -115,8 +83,6 @@ function Facts({ bounty }: { bounty: BoardBounty }) {
   const opened = safeDate(bounty.publishedAt);
   const count = bounty.submissionCount ?? bounty.submissions?.length ?? 0;
   const skills = bounty.skills ?? [];
-  const lead = leader(bounty);
-  const metric = bounty.resolution?.metric;
 
   return (
     <dl data-testid="bounty-facts" className="flex flex-col rounded-xl border border-pk-border bg-pk-elevated">
@@ -140,17 +106,6 @@ function Facts({ bounty }: { bounty: BoardBounty }) {
           )}
         </dd>
       </div>
-      {lead && metric && (
-        <div className={ROW}>
-          <dt className={LABEL}>Leading</dt>
-          <dd className="flex min-w-0 items-baseline gap-2 text-body-base" data-testid="bounty-leading">
-            <span className="truncate font-semibold text-pk-content-primary">@{lead.hunter}</span>
-            {lead.agent && <span className="shrink-0 rounded-full bg-pk-gray-100 px-2 py-0.5 text-body-xs font-semibold text-pk-content-secondary">Agent</span>}
-            <span className="shrink-0 font-semibold text-pk-brand-500 tabular-nums">{formatScore(lead.score, metric.unit)}</span>
-            <span className="shrink-0 text-pk-content-tertiary">{metric.name}</span>
-          </dd>
-        </div>
-      )}
       {places.length > 0 && (
         <div className={ROW}>
           <dt className={LABEL}>Prizes</dt>
@@ -214,7 +169,8 @@ function useHeaderHeight(fallback = 132): number {
 
 /**
  * One bounty's page, after polymarket.com's event page. LEFT: everything about the bounty (header, facts, the full
- * brief) and how its winner is verified. RIGHT (sticky under the header at lg): live submissions, the chat below them.
+ * brief) and how its winner is verified. RIGHT (sticky under the header at lg): live submissions. BELOW both, full width:
+ * the discussion. Below lg everything stacks in that order.
  */
 export function BountyPage({ bounty }: { bounty: BoardBounty }) {
   const headerH = useHeaderHeight();
@@ -240,16 +196,8 @@ export function BountyPage({ bounty }: { bounty: BoardBounty }) {
               <BountyIcon bounty={bounty} size={64} />
             </div>
             <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <p className="flex min-w-0 items-center gap-1.5 text-body-base text-pk-content-secondary" data-testid="bounty-breadcrumb">
-                <span className="truncate">{bounty.sponsor?.name}</span>
-                {bounty.sponsor?.isVerified && (
-                  <>
-                    <VerifiedGlyph />
-                    <span className="sr-only">(verified sponsor)</span>
-                  </>
-                )}
-                <Dot />
-                <span className="shrink-0">{bounty.category}</span>
+              <p className="truncate text-body-base text-pk-content-secondary" data-testid="bounty-breadcrumb">
+                {bounty.category}
               </p>
               <h1 id={`${aboutId}-title`} className="text-2xl font-semibold text-pretty text-pk-content-primary">
                 {bounty.title}
@@ -273,16 +221,20 @@ export function BountyPage({ bounty }: { bounty: BoardBounty }) {
           <ResolutionPanel resolution={bounty.resolution} />
         </div>
 
-        {/* RIGHT: live submissions, then the chat */}
+        {/* RIGHT: live submissions, sticky under the header at lg */}
         <aside
-          aria-label="Submissions and discussion"
+          aria-label="Live submissions"
           data-testid="bounty-side"
           style={{ ['--side-top' as string]: `${top}px` }}
           className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-(--side-top) lg:max-h-[calc(100dvh-var(--side-top)-16px)] lg:w-[400px] lg:shrink-0 lg:overflow-y-auto lg:overscroll-contain lg:[scrollbar-width:thin] lg:[scrollbar-color:var(--color-pk-gray-300)_transparent]"
         >
           <LiveSubmissions bounty={bounty} />
-          <BountyChat bounty={bounty} />
         </aside>
+      </div>
+
+      {/* BELOW EVERYTHING: the discussion, full width */}
+      <div className="mt-8 lg:mt-12">
+        <BountyChat bounty={bounty} />
       </div>
     </article>
   );

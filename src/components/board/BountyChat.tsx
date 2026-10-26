@@ -65,7 +65,7 @@ function Message({ message, now }: { message: ChatMessage; now: number }) {
             {relativeTime(message.createdAt, now)}
           </time>
         </p>
-        <p className="mt-0.5 whitespace-pre-wrap break-words text-body-base text-pk-content-primary">{message.body}</p>
+        <p className="mt-0.5 max-w-[72ch] whitespace-pre-wrap break-words text-body-base text-pk-content-primary">{message.body}</p>
       </div>
     </li>
   );
@@ -187,7 +187,7 @@ function Chat({ bounty }: { bounty: BoardBounty }) {
           tabIndex={0}
           role="region"
           aria-label="Messages"
-          className="max-h-[360px] overflow-y-auto overscroll-contain py-1.5 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-pk-brand-500"
+          className="max-h-[480px] overflow-y-auto overscroll-contain py-1.5 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-pk-brand-500"
         >
           <ol>
             {messages.map((m) => (
@@ -197,7 +197,7 @@ function Chat({ bounty }: { bounty: BoardBounty }) {
         </div>
       )}
 
-      <form onSubmit={onSubmit} className="flex items-end gap-2 border-t border-pk-border p-3">
+      <form onSubmit={onSubmit} className="flex flex-col gap-2 border-t border-pk-border px-4 py-3">
         <label htmlFor={inputId} className="sr-only">
           Ask a question or reply
         </label>
@@ -209,15 +209,21 @@ function Chat({ bounty }: { bounty: BoardBounty }) {
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={onKeyDown}
           placeholder="Ask a question or reply"
-          className="min-h-9 flex-1 resize-none rounded-md border border-pk-border bg-pk-surface px-3 py-2 text-body-base text-pk-content-primary placeholder:text-pk-content-tertiary focus-visible:border-pk-brand-500 focus-visible:outline-2 focus-visible:-outline-offset-1 focus-visible:outline-pk-brand-500"
+          aria-describedby={`${inputId}-hint`}
+          className="min-h-9 w-full resize-none rounded-md border border-pk-border bg-pk-surface px-3 py-2 text-body-base text-pk-content-primary placeholder:text-pk-content-tertiary focus-visible:border-pk-brand-500 focus-visible:outline-2 focus-visible:-outline-offset-1 focus-visible:outline-pk-brand-500"
         />
-        <button
-          type="submit"
-          disabled={!draft.trim()}
-          className="h-9 shrink-0 rounded-md bg-pk-brand-500 px-3.5 text-body-sm font-semibold text-white transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pk-brand-500 disabled:cursor-not-allowed disabled:bg-pk-gray-200 disabled:text-pk-content-tertiary disabled:hover:opacity-100 motion-reduce:transition-none"
-        >
-          Send
-        </button>
+        <div className="flex items-center justify-between gap-3">
+          <p id={`${inputId}-hint`} className="text-body-xs text-pk-content-tertiary">
+            Enter to send, Shift+Enter for a new line
+          </p>
+          <button
+            type="submit"
+            disabled={!draft.trim()}
+            className="h-9 shrink-0 rounded-md bg-pk-brand-500 px-3.5 text-body-sm font-semibold text-white transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pk-brand-500 disabled:cursor-not-allowed disabled:bg-pk-gray-200 disabled:text-pk-content-tertiary disabled:hover:opacity-100 motion-reduce:transition-none"
+          >
+            Send
+          </button>
+        </div>
       </form>
 
       <div aria-live="polite" aria-atomic="true" className="sr-only">
