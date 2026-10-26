@@ -1,0 +1,254 @@
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+
+/**
+ * A menu button that picks one value: polymarket.com's SelectMenu (polykit, chunk 2-m08w_960s_z.js `menuTriggerVariants`,
+ * `menuItemBaseClasses`, `MenuItemLeftSection`, `checkIndicatorCls`), rebuilt on the WAI-ARIA menu button pattern.
+ * The trigger shows the picked option (icon, label, chevron); the popup lists every option as a `menuitemradio`
+ * with a check on the picked one. Keyboard: Enter / Space / ArrowDown open on the picked item, ArrowUp on the last;
+ * arrows wrap, Home / End jump, Enter / Space pick, Escape closes; picking or Escape puts focus back on the trigger.
+ */
+
+export interface SelectMenuOption<T extends string | number> {
+  value: T;
+  label: string;
+  /** An 18 or 20px glyph; rendered at 20px (polymarket's `[&_svg]:size-5`). */
+  icon?: ReactNode;
+}
+
+const FOCUS_RING = 'focus-visible:ring-2 focus-visible:ring-pk-content-secondary focus-visible:ring-offset-1 focus-visible:ring-offset-pk-surface';
+
+/* polymarket's outline trigger, on this project's tokens. Open: data-[open] wash, darker hairline and a 3px gray ring. */
+const TRIGGER = `inline-flex h-10 shrink-0 cursor-pointer select-none items-center gap-0.5 rounded-md border border-pk-gray-200 bg-pk-surface px-2.5 text-body-base font-semibold text-pk-content-primary outline-none transition-[color,background-color,border-color,scale] duration-[120ms] ease-out hover:bg-pk-hover-overlay-darker active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100 data-open:border-pk-gray-300 data-open:bg-pk-gray-100 data-open:ring-3 data-open:ring-pk-gray-100 ${FOCUS_RING}`;
+
+/* Clears the viewport edge by 16px (the gutter `px-4` the board uses on phones). */
+const EDGE = 16;
+
+/** Opening one menu closes every other one on the page. */
+const OPEN_EVENT = 'pk-select-menu-open';
+
+/** polymarket's trigger chevron (20px, filled). */
+function ChevronIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 20 20" aria-hidden="true">
+      <path fill="currentColor" d="M13.548 7.714a.876.876 0 0 1 1.237 1.238l-4.167 4.166a.875.875 0 0 1-1.237 0L5.214 8.952a.877.877 0 0 1 1.238-1.238l3.547 3.548z" />
+    </svg>
+  );
+}
+
+/** polymarket's CheckSmallIcon20 (chunk 0zws79-gh-sw_.js). */
+function CheckIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 20 20" aria-hidden="true">
+      <path fill="currentColor" d="M14.528 5.074a.875.875 0 0 1 1.36 1.102l-7.083 8.75a.876.876 0 0 1-1.363-.004l-3.334-4.167a.875.875 0 0 1 1.367-1.093l2.653 3.317z" />
+    </svg>
+  );
+}
+
+export function SelectMenu<T extends string | number>({
+  label,
+  value,
+  options,
+  onChange,
+  testId,
+}: {
+  /** The accessible name prefix, e.g. "Sort by"; the trigger reads "Sort by: Highest reward". */
+  label: string;
+  value: T;
+  options: readonly SelectMenuOption<T>[];
+  onChange: (next: T) => void;
+  testId?: string;
+}) {
+  const id = useId();
+  const menuId = `${id}-menu`;
+  const [open, setOpen] = useState(false);
+  /** Where focus lands when the popup mounts: the picked item, the last item, or the popup itself (a pointer open). */
+  const [initialFocus, setInitialFocus] = useState<'checked' | 'last' | 'menu'>('checked');
+  const [shift, setShift] = useState(0);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const selected = options.find((o) => o.value === value) ?? options[0];
+
+  const items = () => Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"]') ?? []);
+
+  const openMenu = (focus: 'checked' | 'last' | 'menu') => {
+    setInitialFocus(focus);
+    setShift(0);
+    setOpen(true);
+  };
+
+  const close = useCallback((returnFocus: boolean) => {
+    setOpen(false);
+    if (returnFocus) triggerRef.current?.focus();
+  }, []);
+
+  const pick = (next: T) => {
+    if (next !== value) onChange(next);
+    close(true);
+  };
+
+  // Keep the popup on screen: shift it left when it would cross the viewport's right edge (narrow phones).
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const menu = menuRef.current;
+      const root = rootRef.current;
+      if (!menu || !root) return;
+      const left = root.getBoundingClientRect().left;
+      const overflow = left + menu.offsetWidth - (document.documentElement.clientWidth - EDGE);
+      setShift(overflow > 0 ? -Math.min(overflow, left - EDGE) : 0);
+    };
+    place();
+    window.addEventListener('resize', place);
+    return () => window.removeEventListener('resize', place);
+  }, [open]);
+
+  // Focus on open: keyboard opens land on an item, a pointer open parks on the popup so no row looks hovered.
+  useEffect(() => {
+    if (!open) return;
+    const list = items();
+    if (initialFocus === 'menu') menuRef.current?.focus({ preventScroll: true });
+    else if (initialFocus === 'last') list.at(-1)?.focus({ preventScroll: true });
+    else (list.find((el) => el.getAttribute('aria-checked') === 'true') ?? list[0])?.focus({ preventScroll: true });
+  }, [open, initialFocus]);
+
+  // Light dismiss: a press outside closes; so does another menu opening.
+  useEffect(() => {
+    if (!open) return;
+    window.dispatchEvent(new CustomEvent(OPEN_EVENT, { detail: id }));
+    const onPointerDown = (event: PointerEvent) => {
+      if (rootRef.current?.contains(event.target as Node)) return;
+      close(false);
+    };
+    const onOtherOpen = (event: Event) => {
+      if ((event as CustomEvent<string>).detail !== id) close(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener(OPEN_EVENT, onOtherOpen);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener(OPEN_EVENT, onOtherOpen);
+    };
+  }, [open, id, close]);
+
+  const onTriggerKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      openMenu(event.key === 'ArrowUp' ? 'last' : 'checked');
+    }
+  };
+
+  const onMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const list = items();
+    const at = list.indexOf(document.activeElement as HTMLElement);
+    const focusAt = (i: number) => list[(i + list.length) % list.length]?.focus({ preventScroll: true });
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        focusAt(at + 1);
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        focusAt(at < 0 ? -1 : at - 1);
+        break;
+      case 'Home':
+        event.preventDefault();
+        focusAt(0);
+        break;
+      case 'End':
+        event.preventDefault();
+        focusAt(-1);
+        break;
+      case 'Enter':
+      case ' ': {
+        event.preventDefault();
+        const option = at >= 0 ? options[at] : undefined;
+        if (option) pick(option.value);
+        break;
+      }
+      case 'Escape':
+        event.preventDefault();
+        close(true);
+        break;
+      case 'Tab':
+        // Tab leaves from the trigger, so focus moves on to the next control in the bar.
+        triggerRef.current?.focus();
+        setOpen(false);
+        break;
+    }
+  };
+
+  return (
+    <div ref={rootRef} className="relative shrink-0">
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        aria-label={`${label}: ${selected?.label ?? ''}`}
+        data-open={open || undefined}
+        data-testid={testId}
+        onClick={(event) => (open ? close(false) : openMenu(event.detail === 0 ? 'checked' : 'menu'))}
+        onKeyDown={onTriggerKeyDown}
+        className={TRIGGER}
+      >
+        {selected?.icon && (
+          <span aria-hidden="true" className="flex shrink-0 items-center [&_svg]:size-5">
+            {selected.icon}
+          </span>
+        )}
+        <span className="min-w-0 flex-1 truncate px-1 text-left">{selected?.label}</span>
+        <span
+          aria-hidden="true"
+          className={`flex shrink-0 items-center text-pk-gray-400 transition-transform duration-150 ease-out motion-reduce:transition-none [&_svg]:size-5 ${open ? 'rotate-180' : ''}`}
+        >
+          <ChevronIcon />
+        </span>
+      </button>
+
+      {open && (
+        <div
+          ref={menuRef}
+          id={menuId}
+          role="menu"
+          tabIndex={-1}
+          aria-label={label}
+          data-testid={testId ? `${testId}-menu` : undefined}
+          onKeyDown={onMenuKeyDown}
+          style={shift ? { left: shift } : undefined}
+          className="absolute top-full left-0 z-30 mt-2 flex w-max min-w-[max(100%,12.5rem)] max-w-[calc(100vw-2rem)] origin-top-left flex-col rounded-xl bg-pk-surface p-2 shadow-pk-middle outline-none focus-visible:ring-2 focus-visible:ring-pk-content-secondary transition-[opacity,scale] duration-150 ease-out starting:scale-95 starting:opacity-0 motion-reduce:transition-none"
+        >
+          {options.map((o) => {
+            const checked = o.value === value;
+            return (
+              <div
+                key={String(o.value)}
+                role="menuitemradio"
+                aria-checked={checked}
+                tabIndex={-1}
+                data-value={o.value}
+                onClick={() => pick(o.value)}
+                onPointerMove={(event) => {
+                  if (document.activeElement !== event.currentTarget) event.currentTarget.focus({ preventScroll: true });
+                }}
+                className="flex h-10 w-full cursor-pointer select-none items-center gap-2.5 rounded-md px-3 text-left text-pk-content-primary outline-none hover:bg-pk-gray-100 focus:bg-pk-gray-100 focus-visible:bg-pk-gray-100"
+              >
+                {o.icon && (
+                  <span aria-hidden="true" className="flex size-5 shrink-0 items-center justify-center [&_svg]:size-5">
+                    {o.icon}
+                  </span>
+                )}
+                <span className="min-w-0 flex-1 truncate text-body-base font-semibold">{o.label}</span>
+                <span aria-hidden="true" className="flex size-5 shrink-0 items-center [&_svg]:size-5">
+                  {checked && <CheckIcon />}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

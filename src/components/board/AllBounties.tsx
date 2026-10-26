@@ -1,15 +1,18 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   activeFilterCount,
-  COMPETITION_OPTIONS,
   DEFAULT_PANEL_FILTERS,
   ENDS_WITHIN_OPTIONS,
+  LOW_COMPETITION_BELOW,
   MIN_REWARD_OPTIONS,
   queryTerms,
+  SORT_OPTIONS,
+  type BoardSort,
   type PanelFilters,
 } from '../../lib/boardFilters';
 import type { BoardBounty } from '../../lib/bounty';
 import { BountyCard } from '../BountyCard';
+import { SelectMenu } from './SelectMenu';
 
 /**
  * The home page's bounty grid, directly under the sticky header. polymarket.com's "All markets" grid geometry:
@@ -27,7 +30,9 @@ const TEXT_BUTTON = `inline-flex items-center h-8 px-2 -mx-2 rounded-md text-bod
 const OUTLINE_BUTTON = `inline-flex items-center h-10 px-4 rounded-md border border-pk-border text-body-base font-semibold text-pk-content-primary cursor-pointer hover:bg-pk-hover-overlay-darker transition-colors duration-150 motion-reduce:transition-none ${FOCUS_RING}`;
 
 const SEARCH_ID = 'all-bounties-search';
-const FILTER_PANEL_ID = 'all-bounties-filters';
+const FILTER_BAR_ID = 'all-bounties-filters';
+/** The bar's expand: polymarket's 200ms (react-animate-height plus a 200ms opacity fade on the home filter row). */
+const BAR_EXPAND_MS = 200;
 
 function MagnifierIcon() {
   return (
@@ -74,64 +79,119 @@ function ClearIcon() {
   );
 }
 
-/** One row of the filter popover: a labelled set of pressable segments, exactly one pressed. */
-function Segmented<T extends string | number>({
-  legend,
-  options,
-  value,
-  onChange,
-}: {
-  legend: string;
-  options: readonly { value: T; label: string }[];
-  value: T;
-  onChange: (next: T) => void;
-}) {
+/*
+ * Sort icons: polymarket.com's own 18px outline glyphs from its home sort menu (chunk 3dokwi3h578v0.js; the
+ * 24hr Volume one also sits in the live trigger markup). Each maps to the polymarket sort it stands in for.
+ */
+const ICON_18 = { xmlns: 'http://www.w3.org/2000/svg', width: 18, height: 18, viewBox: '0 0 18 18', fill: 'none', 'aria-hidden': true } as const;
+const STROKE_18 = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
+
+/** IconArrowTrendUpOutline18 (polymarket "24hr Volume"). */
+function TrendUpIcon() {
   return (
-    <fieldset className="flex flex-col gap-1.5">
-      <legend className="mb-1.5 text-body-xs text-pk-content-secondary">{legend}</legend>
-      <div className="flex gap-0.5 rounded-md bg-pk-gray-100 p-0.5">
-        {options.map((o) => {
-          const on = o.value === value;
-          return (
-            <button
-              key={String(o.value)}
-              type="button"
-              aria-pressed={on}
-              data-value={o.value}
-              onClick={() => onChange(o.value)}
-              className={`h-8 flex-1 cursor-pointer rounded-md px-2 text-body-sm whitespace-nowrap transition-colors duration-150 motion-reduce:transition-none outline-none focus-visible:ring-2 focus-visible:ring-pk-content-secondary ${
-                on ? 'bg-pk-surface font-semibold text-pk-content-primary shadow-pk-minimal-soft' : 'text-pk-content-secondary hover:text-pk-content-primary'
-              }`}
-            >
-              {o.label}
-            </button>
-          );
-        })}
-      </div>
-    </fieldset>
+    <svg {...ICON_18}>
+      <path {...STROKE_18} d="M1.75,12.25l3.646-3.646c.195-.195,.512-.195,.707,0l3.293,3.293c.195,.195,.512,.195,.707,0l6.146-6.146" />
+      <polyline {...STROKE_18} points="11.25 5.75 16.25 5.75 16.25 10.75" />
+    </svg>
   );
 }
 
-function FilterPanel({ filters, onChange, panelRef }: { filters: PanelFilters; onChange: (next: PanelFilters) => void; panelRef: React.RefObject<HTMLDivElement | null> }) {
-  const count = activeFilterCount(filters);
+/** IconFireFlameOutline18 (polymarket "Total Volume"). */
+function FlameIcon() {
   return (
-    <div
-      ref={panelRef}
-      id={FILTER_PANEL_ID}
-      role="dialog"
-      aria-label="Filter bounties"
-      className="absolute top-full right-0 z-20 mt-2 flex w-[min(360px,calc(100vw-2rem))] flex-col gap-4 rounded-xl bg-pk-surface p-4 shadow-pk-middle animate-in fade-in motion-reduce:animate-none"
-    >
-      <div className="flex items-center justify-between">
-        <p className="text-body-base font-semibold text-pk-content-primary">Filters</p>
-        <button type="button" className={TEXT_BUTTON} disabled={count === 0} onClick={() => onChange(DEFAULT_PANEL_FILTERS)}>
-          Reset
-        </button>
-      </div>
-      <Segmented legend="Minimum reward" options={MIN_REWARD_OPTIONS} value={filters.minReward} onChange={(minReward) => onChange({ ...filters, minReward })} />
-      <Segmented legend="Ends within" options={ENDS_WITHIN_OPTIONS} value={filters.endsWithin} onChange={(endsWithin) => onChange({ ...filters, endsWithin })} />
-      <Segmented legend="Competition" options={COMPETITION_OPTIONS} value={filters.competition} onChange={(competition) => onChange({ ...filters, competition })} />
-    </div>
+    <svg {...ICON_18}>
+      <path {...STROKE_18} d="M6.962,16.25c-.28-2.75,1.803-2.097,1.875-4.501,1.581,.851,2.239,2.987,2.2,4.465" />
+      <path {...STROKE_18} d="M11.037,16.214c3.901-1.516,4.725-5.833,1.964-9.85" />
+      <path {...STROKE_18} d="M10.533,7.37s.696-3.766-2.044-5.62c-.364,4.375-5.109,4.531-5.109,9.237,0,2.117,1.096,4.402,3.582,5.263" />
+    </svg>
+  );
+}
+
+/** IconPopOutline18 (polymarket "Newest"): triangle, circle, sparkle. */
+function ShapesIcon() {
+  return (
+    <svg {...ICON_18}>
+      <path {...STROKE_18} d="m3.5417,3.6104l-1.7538,4.5807c-.1547.4042.1872.8238.6143.7539l4.8771-.7986c.4271-.0699.6173-.5768.3418-.9105l-3.1233-3.7821c-.2735-.3312-.8025-.2446-.9561.1566Z" />
+      <circle {...STROKE_18} cx="13.5" cy="4.5" r="2.75" />
+      <path
+        {...STROKE_18}
+        d="m14.25,12.5167h0c-1.274.9216-2.2147,2.2316-2.681,3.7333h0s0,0,0,0c-.9216-1.274-2.2316-2.2147-3.7333-2.681h0,0c1.274-.9216,2.2147-2.2316,2.681-3.7333h0s0,0,0,0c.9216,1.274,2.2316,2.2147,3.7333,2.681h0Z"
+      />
+    </svg>
+  );
+}
+
+/** IconCircleHalfDottedClockOutline18 (polymarket "Ending Soon"). */
+function DottedClockIcon() {
+  return (
+    <svg {...ICON_18}>
+      <polyline {...STROKE_18} points="9 4.75 9 9 12.25 11.25" />
+      <path {...STROKE_18} d="M9,1.75c4.004,0,7.25,3.246,7.25,7.25s-3.246,7.25-7.25,7.25" />
+      {[
+        [3.873, 14.127],
+        [1.75, 9],
+        [3.873, 3.873],
+        [6.226, 15.698],
+        [2.302, 11.774],
+        [2.302, 6.226],
+        [6.226, 2.302],
+      ].map(([cx, cy]) => (
+        <circle key={`${cx},${cy}`} cx={cx} cy={cy} r="0.75" fill="currentColor" />
+      ))}
+    </svg>
+  );
+}
+
+/** IconBoxingGloveOutline18 (polymarket "Competitive"): the least-contested bounties first. */
+function BoxingGloveIcon() {
+  return (
+    <svg {...ICON_18}>
+      <path {...STROKE_18} d="M13.25 13.25V15.25C13.25 15.802 12.802 16.25 12.25 16.25H6.75C6.198 16.25 5.75 15.802 5.75 15.25V13.25" />
+      <path {...STROKE_18} d="M12.25 5.75C12.25 6.855 11.355 7.75 10.25 7.75H7.58002" />
+      <path
+        {...STROKE_18}
+        d="M4.018 6.751C3.848 6.457 3.75 6.115 3.75 5.75V5.25C3.75 3.593 5.093 2.25 6.75 2.25H12.25C13.907 2.25 15.25 3.593 15.25 5.25V10.25C15.25 11.907 13.907 13.25 12.25 13.25H5.25C3.593 13.25 2.25 11.907 2.25 10.25V8.75C2.25 7.645 3.145 6.75 4.25 6.75H6C6.966 6.75 7.75 7.534 7.75 8.5C7.75 9.467 6.966 10.25 6 10.25H5.25"
+      />
+    </svg>
+  );
+}
+
+const SORT_ICONS: Record<BoardSort, ReactNode> = {
+  reward: <TrendUpIcon />,
+  submissions: <FlameIcon />,
+  newest: <ShapesIcon />,
+  ending: <DottedClockIcon />,
+  fewest: <BoxingGloveIcon />,
+};
+const SORT_MENU_OPTIONS = SORT_OPTIONS.map((o) => ({ ...o, icon: SORT_ICONS[o.value] }));
+
+/**
+ * polymarket's "Hide sports" checkbox: a 16px box, gap-2, a 12px medium label. A native input, restyled; checked
+ * fills the brand blue with polymarket's checkbox tick (CheckboxIcon20's path, chunk 27qu7qjdnlmmn.js) in white.
+ */
+function FilterCheckbox({ label, checked, onChange, testId }: { label: string; checked: boolean; onChange: (next: boolean) => void; testId: string }) {
+  return (
+    <label className="inline-flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap text-body-xs text-pk-content-primary">
+      <span className="relative flex size-4 shrink-0">
+        <input
+          type="checkbox"
+          data-testid={testId}
+          checked={checked}
+          onChange={(event) => onChange(event.target.checked)}
+          className={`peer size-4 shrink-0 cursor-pointer appearance-none rounded-xs border border-pk-gray-300 bg-pk-surface transition-colors duration-150 motion-reduce:transition-none hover:border-pk-gray-500 checked:border-pk-brand-500 checked:bg-pk-brand-500 ${FOCUS_RING}`}
+        />
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 20 20"
+          fill="none"
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 size-4 text-pk-surface opacity-0 peer-checked:opacity-100"
+        >
+          <path d="M0.75 3.75003L3 6.25003L7.25 0.750034" transform="translate(6 6.5)" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </span>
+      {label}
+    </label>
   );
 }
 
@@ -145,6 +205,8 @@ export function AllBounties({
   onFiltersChange,
   savedOnly,
   onSavedOnlyChange,
+  sort,
+  onSortChange,
 }: {
   /** The tab's bounties after the toolbar's refinements, in display order. */
   bounties: BoardBounty[];
@@ -157,42 +219,31 @@ export function AllBounties({
   onFiltersChange: (next: PanelFilters) => void;
   savedOnly: boolean;
   onSavedOnlyChange: (next: boolean) => void;
+  sort: BoardSort;
+  onSortChange: (next: BoardSort) => void;
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  /** True once the bar has finished expanding: only then may its menus hang outside it. */
+  const [barSettled, setBarSettled] = useState(false);
   const searchButtonRef = useRef<HTMLButtonElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const filterButtonRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
 
   const filterCount = activeFilterCount(filters);
   const refined = queryTerms(query).length > 0 || filterCount > 0 || savedOnly;
 
-  // The filter popover closes on Escape (focus back to its button) or a press anywhere outside it.
+  // The collapse clips its content while it animates; once open it lets the menus overflow (instantly under reduced motion).
   useEffect(() => {
     if (!filtersOpen) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      setFiltersOpen(false);
-      filterButtonRef.current?.focus();
-    };
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (panelRef.current?.contains(target) || filterButtonRef.current?.contains(target)) return;
-      const focusInside = panelRef.current?.contains(document.activeElement) ?? false;
-      setFiltersOpen(false);
-      if (focusInside) filterButtonRef.current?.focus();
-    };
-    document.addEventListener('keydown', onKeyDown);
-    document.addEventListener('pointerdown', onPointerDown);
-    // Keyboard users land on the current choice of the first group.
-    panelRef.current?.querySelector<HTMLButtonElement>('[aria-pressed="true"]')?.focus({ preventScroll: true });
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      document.removeEventListener('pointerdown', onPointerDown);
-    };
+    const instant = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const timer = window.setTimeout(() => setBarSettled(true), instant ? 0 : BAR_EXPAND_MS);
+    return () => window.clearTimeout(timer);
   }, [filtersOpen]);
+
+  const toggleFilters = () => {
+    setBarSettled(false);
+    setFiltersOpen((open) => !open);
+  };
 
   const closeSearch = () => {
     setSearchOpen(false);
@@ -203,7 +254,6 @@ export function AllBounties({
     onQueryChange('');
     onFiltersChange(DEFAULT_PANEL_FILTERS);
     onSavedOnlyChange(false);
-    setFiltersOpen(false);
     setSearchOpen(false);
     // The Clear control unmounts with the summary; park focus on the toolbar instead of the document body.
     searchButtonRef.current?.focus();
@@ -271,30 +321,25 @@ export function AllBounties({
           <MagnifierIcon />
         </button>
 
-        <div className="relative">
-          <button
-            ref={filterButtonRef}
-            type="button"
-            aria-label={filterCount > 0 ? `Filter bounties, ${filterCount} active` : 'Filter bounties'}
-            aria-haspopup="dialog"
-            aria-expanded={filtersOpen}
-            aria-controls={filtersOpen ? FILTER_PANEL_ID : undefined}
-            onClick={() => setFiltersOpen((open) => !open)}
-            className={filtersOpen ? ICON_OPEN : filterCount > 0 ? ICON_ON : ICON_IDLE}
-          >
-            <SlidersIcon />
-            {filterCount > 0 && (
-              <span
-                aria-hidden="true"
-                data-testid="filter-count"
-                className="absolute top-0.5 right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-pk-brand-500 px-1 text-body-xs text-pk-surface tabular-nums ring-2 ring-pk-surface"
-              >
-                {filterCount}
-              </span>
-            )}
-          </button>
-          {filtersOpen && <FilterPanel filters={filters} onChange={onFiltersChange} panelRef={panelRef} />}
-        </div>
+        <button
+          type="button"
+          aria-label={filterCount > 0 ? `Filter bounties, ${filterCount} active` : 'Filter bounties'}
+          aria-expanded={filtersOpen}
+          aria-controls={FILTER_BAR_ID}
+          onClick={toggleFilters}
+          className={filtersOpen ? ICON_OPEN : filterCount > 0 ? ICON_ON : ICON_IDLE}
+        >
+          <SlidersIcon />
+          {!filtersOpen && filterCount > 0 && (
+            <span
+              aria-hidden="true"
+              data-testid="filter-count"
+              className="absolute top-0.5 right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-pk-brand-500 px-1 text-body-xs text-pk-surface tabular-nums ring-2 ring-pk-surface"
+            >
+              {filterCount}
+            </span>
+          )}
+        </button>
 
         <button
           type="button"
@@ -305,6 +350,48 @@ export function AllBounties({
         >
           <BookmarkIcon filled={savedOnly} />
         </button>
+      </div>
+
+      {/*
+        polymarket's filter row: a collapsible region (height 0 to auto, 200ms fade) under the icon row, left-aligned.
+        Closed, it is inert (out of the tab order and the a11y tree). z-30 lifts its menus over the cards' z-20 link overlays.
+      */}
+      <div
+        id={FILTER_BAR_ID}
+        data-testid="filter-bar"
+        data-state={filtersOpen ? 'open' : 'closed'}
+        inert={!filtersOpen}
+        className={`relative z-30 -mt-1 grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none ${filtersOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+      >
+        <div className={`min-h-0 ${filtersOpen && barSettled ? 'overflow-visible' : 'overflow-hidden'}`}>
+          <div
+            role="group"
+            aria-label="Sort and filter bounties"
+            className={`flex flex-wrap items-center gap-2 pt-2.5 pb-2 lg:pt-2 transition-opacity duration-200 ease-out motion-reduce:transition-none ${filtersOpen ? 'opacity-100' : 'opacity-0'}`}
+          >
+            <SelectMenu label="Sort by" value={sort} options={SORT_MENU_OPTIONS} onChange={onSortChange} testId="filter-sort" />
+            <SelectMenu
+              label="Ends within"
+              value={filters.endsWithin}
+              options={ENDS_WITHIN_OPTIONS}
+              onChange={(endsWithin) => onFiltersChange({ ...filters, endsWithin })}
+              testId="filter-ends"
+            />
+            <SelectMenu
+              label="Minimum reward"
+              value={filters.minReward}
+              options={MIN_REWARD_OPTIONS}
+              onChange={(minReward) => onFiltersChange({ ...filters, minReward })}
+              testId="filter-reward"
+            />
+            <FilterCheckbox
+              label={`Under ${LOW_COMPETITION_BELOW} submissions`}
+              checked={filters.competition === 'low'}
+              onChange={(low) => onFiltersChange({ ...filters, competition: low ? 'low' : 'any' })}
+              testId="filter-low-competition"
+            />
+          </div>
+        </div>
       </div>
 
       <div role="status" className={refined && total > 0 ? 'flex items-center gap-3 pb-2' : 'sr-only'}>

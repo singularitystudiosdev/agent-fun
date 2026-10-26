@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AllBounties } from './components/board/AllBounties';
 import { BountyPage } from './components/board/BountyPage';
 import { SiteHeader } from './components/board/SiteHeader';
-import { applyBoardFilters, DEFAULT_PANEL_FILTERS, type PanelFilters } from './lib/boardFilters';
+import { applyBoardFilters, DEFAULT_PANEL_FILTERS, isBoardSort, sortBounties, tabDefaultSort, type BoardSort, type PanelFilters } from './lib/boardFilters';
 import { DEFAULT_TAB, isBoardTab, selectBounties, type BoardTab } from './lib/boardTabs';
 import { BOARD_BOUNTIES } from './lib/bountyData';
 import { appHref, appPath } from './lib/paths';
@@ -22,6 +22,12 @@ const readTab = (): BoardTab => {
 /** The board search lives in `?q=` so a filtered board can be shared and survives a reload. */
 const readQuery = (): string => new URLSearchParams(window.location.search).get('q') ?? '';
 
+/** A sort the user picked over the tab's default lives in `?sort=`; absent or unknown means the tab's own order. */
+const readSort = (): BoardSort | null => {
+  const s = new URLSearchParams(window.location.search).get('sort');
+  return isBoardSort(s) ? s : null;
+};
+
 /** agent.fun: the bounty grid (header tabs filter and sort it) and one page per bounty at /bounty/<slug>. */
 export default function App() {
   if (view === 'replica') return <ReplicaView />;
@@ -34,6 +40,8 @@ function Board() {
   const [query, setQuery] = useState(readQuery);
   const [filters, setFilters] = useState<PanelFilters>(DEFAULT_PANEL_FILTERS);
   const [savedOnly, setSavedOnly] = useState(false);
+  /** The filter bar's sort when the user picked one; null follows the tab (`tabDefaultSort`). */
+  const [sortOverride, setSortOverride] = useState<BoardSort | null>(readSort);
   const savedIds = useSavedIds();
   const queryRef = useRef(query);
   useEffect(() => {
@@ -48,6 +56,8 @@ function Board() {
     window.history.pushState(null, '', url.pathname + url.search + url.hash);
     setPath(currentPath());
     setTab(readTab());
+    // A tab click or the logo starts that tab in its own order (the sort, unlike the search, does not follow).
+    setSortOverride(readSort());
     window.scrollTo({ top: 0 });
   }, []);
 
@@ -56,8 +66,12 @@ function Board() {
     const onPop = () => {
       setPath(currentPath());
       setTab(readTab());
-      // Back/Forward onto the board restores that entry's search; a bounty page keeps the current one.
-      if (currentPath() === '/') setQuery(readQuery());
+      // Back/Forward onto the board restores that entry's search and sort (none in the URL: the tab's own order);
+      // a bounty page keeps the current ones.
+      if (currentPath() === '/') {
+        setQuery(readQuery());
+        setSortOverride(readSort());
+      }
     };
     const onClick = (e: MouseEvent) => {
       if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
@@ -87,16 +101,26 @@ function Board() {
   const slug = path.startsWith(BOUNTY_PREFIX) ? decodeURIComponent(path.slice(BOUNTY_PREFIX.length)) : null;
   const bounty = slug ? BOARD_BOUNTIES.find((b) => b.slug === slug) : undefined;
   const tabbed = useMemo(() => selectBounties(BOARD_BOUNTIES, tab), [tab]);
-  const shown = useMemo(() => applyBoardFilters(tabbed, { query, ...filters, savedOnly }, savedIds), [tabbed, query, filters, savedOnly, savedIds]);
+  const defaultSort = tabDefaultSort(tab);
+  const sort = sortOverride ?? defaultSort;
+  const shown = useMemo(
+    () => sortBounties(applyBoardFilters(tabbed, { query, ...filters, savedOnly }, savedIds), sort),
+    [tabbed, query, filters, savedOnly, savedIds, sort],
+  );
+  /** Only a sort that differs from the tab's default goes in the URL. */
+  const sortParam = sort === defaultSort ? null : sort;
 
-  // Mirror the search into the board's URL (replaceState: typing must not stack history entries). Bounty pages keep a clean URL.
+  // Mirror the search and a non-default sort into the board's URL (replaceState: typing must not stack history entries).
+  // Bounty pages keep a clean URL.
   useEffect(() => {
     if (slug !== null) return;
     const url = new URL(window.location.href);
     if (query) url.searchParams.set('q', query);
     else url.searchParams.delete('q');
+    if (sortParam) url.searchParams.set('sort', sortParam);
+    else url.searchParams.delete('sort');
     if (url.href !== window.location.href) window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
-  }, [query, slug]);
+  }, [query, sortParam, slug]);
 
   /** The header search: typing on a bounty page brings the user to the board so the results show. */
   const changeHeaderQuery = useCallback(
@@ -129,6 +153,8 @@ function Board() {
               onFiltersChange={setFilters}
               savedOnly={savedOnly}
               onSavedOnlyChange={setSavedOnly}
+              sort={sort}
+              onSortChange={setSortOverride}
             />
           </>
         ) : bounty ? (

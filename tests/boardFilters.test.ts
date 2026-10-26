@@ -12,7 +12,22 @@ registerHooks({
   },
 });
 
-const { activeFilterCount, applyBoardFilters, DEFAULT_BOARD_FILTERS, DEFAULT_PANEL_FILTERS, isRefined } = await import('../src/lib/boardFilters.ts');
+const {
+  activeFilterCount,
+  applyBoardFilters,
+  COMPETITION_OPTIONS,
+  DEFAULT_BOARD_FILTERS,
+  DEFAULT_PANEL_FILTERS,
+  ENDS_WITHIN_OPTIONS,
+  isBoardSort,
+  isRefined,
+  MIN_REWARD_OPTIONS,
+  SORT_OPTIONS,
+  sortBounties,
+  tabDefaultSort,
+} = await import('../src/lib/boardFilters.ts');
+const { BOARD_TABS, selectBounties } = await import('../src/lib/boardTabs.ts');
+const { buildBoard } = await import('../src/lib/bountyData.ts');
 const { readSavedIds } = await import('../src/lib/saved.ts');
 type BoardBounty = import('../src/lib/bounty.ts').BoardBounty;
 
@@ -116,4 +131,116 @@ test('readSavedIds reads only bounty bookmarks set to "1"', () => {
   const storage = { length: keys.length, key: (i: number) => keys[i] ?? null, getItem: (k: string) => data[k] ?? null };
   assert.deepEqual([...readSavedIds(storage)].sort(), ['a', 'c-d']);
   assert.deepEqual([...readSavedIds(undefined)], []);
+});
+
+// Sort keys deliberately collide so every tie-break is exercised: p/q tie on everything but id; r/s tie on submissions and reward.
+const SORTABLE: BoardBounty[] = [
+  make('q', { rewardAmount: 5_000, submissionCount: 10, publishedAt: new Date(NOW - 5 * H).toISOString(), deadline: new Date(NOW + 50 * H).toISOString() }),
+  make('r', { rewardAmount: 8_000, submissionCount: 30, publishedAt: new Date(NOW - 2 * H).toISOString(), deadline: new Date(NOW + 20 * H).toISOString() }),
+  make('p', { rewardAmount: 5_000, submissionCount: 10, publishedAt: new Date(NOW - 5 * H).toISOString(), deadline: new Date(NOW + 50 * H).toISOString() }),
+  make('t', { rewardAmount: 12_000, submissionCount: 3, publishedAt: new Date(NOW - 9 * H).toISOString(), deadline: new Date(NOW + 90 * H).toISOString() }),
+  make('s', { rewardAmount: 8_000, submissionCount: 30, publishedAt: new Date(NOW - 1 * H).toISOString(), deadline: new Date(NOW + 70 * H).toISOString() }),
+];
+
+test('SORT_OPTIONS: five sorts in display order', () => {
+  assert.deepEqual(
+    SORT_OPTIONS.map((o) => [o.value, o.label]),
+    [
+      ['reward', 'Highest reward'],
+      ['submissions', 'Most submissions'],
+      ['newest', 'Newest'],
+      ['ending', 'Ending soon'],
+      ['fewest', 'Fewest submissions'],
+    ],
+  );
+  for (const o of SORT_OPTIONS) assert.equal(isBoardSort(o.value), true, o.value);
+  assert.equal(isBoardSort('volume'), false);
+  assert.equal(isBoardSort(null), false);
+});
+
+test('sortBounties orders by each sort; ties break by reward desc, then deadline, then id', () => {
+  const by = (sort: Parameters<typeof sortBounties>[1]) => ids(sortBounties(SORTABLE, sort));
+  // r and s tie on reward: r has the nearer deadline. p and q tie on everything: id asc.
+  assert.deepEqual(by('reward'), ['t', 'r', 's', 'p', 'q']);
+  // r and s tie on submissions and reward: nearer deadline (r) first.
+  assert.deepEqual(by('submissions'), ['r', 's', 'p', 'q', 't']);
+  assert.deepEqual(by('newest'), ['s', 'r', 'p', 'q', 't']);
+  assert.deepEqual(by('ending'), ['r', 'p', 'q', 's', 't']);
+  assert.deepEqual(by('fewest'), ['t', 'p', 'q', 'r', 's']);
+});
+
+test('sortBounties: tie on the primary key falls back to reward desc', () => {
+  const tied = [
+    make('lo', { rewardAmount: 1_000, submissionCount: 7, publishedAt: new Date(NOW - H).toISOString() }),
+    make('hi', { rewardAmount: 9_000, submissionCount: 7, publishedAt: new Date(NOW - H).toISOString() }),
+  ];
+  for (const sort of ['submissions', 'newest', 'ending', 'fewest'] as const) assert.deepEqual(ids(sortBounties(tied, sort)), ['hi', 'lo'], sort);
+});
+
+test('sortBounties is deterministic and pure', () => {
+  for (const { value } of SORT_OPTIONS) {
+    const forward = ids(sortBounties(SORTABLE, value));
+    assert.deepEqual(ids(sortBounties([...SORTABLE].reverse(), value)), forward, `${value}: independent of incoming order`);
+  }
+  const before = ids(SORTABLE);
+  const out = sortBounties(SORTABLE, 'fewest');
+  assert.notEqual(out, SORTABLE, 'returns a new array');
+  assert.deepEqual(ids(SORTABLE), before, 'input untouched');
+  assert.deepEqual(sortBounties([], 'reward'), []);
+});
+
+test('tabDefaultSort: each tab starts in its own order', () => {
+  assert.equal(tabDefaultSort('trending'), 'reward');
+  assert.equal(tabDefaultSort('new'), 'newest');
+  assert.equal(tabDefaultSort('ending'), 'ending');
+  assert.equal(tabDefaultSort('Trading'), 'reward');
+  for (const t of BOARD_TABS) assert.equal(isBoardSort(tabDefaultSort(t.id)), true, t.id);
+});
+
+test("a tab's default sort never changes what the tab shows", () => {
+  // The real board at a fixed clock, plus the fixtures (full ties included) laid out highest reward first like the real board.
+  const fixtures = sortBounties([...LIST, ...SORTABLE], 'reward');
+  for (const [name, all] of [['board', buildBoard(NOW)], ['fixtures', fixtures]] as const) {
+    for (const { id: tab } of BOARD_TABS) {
+      const tabbed = selectBounties(all, tab, NOW);
+      if (name === 'board' && (tab === 'trending' || tab === 'new' || tab === 'ending')) assert.ok(tabbed.length > 5, `${name}/${tab} is not vacuous`);
+      assert.deepEqual(ids(sortBounties(tabbed, tabDefaultSort(tab))), ids(tabbed), `${name}/${tab}`);
+    }
+  }
+});
+
+test('option arrays: relabelled, same values in the same order', () => {
+  assert.deepEqual(
+    MIN_REWARD_OPTIONS.map((o) => [o.value, o.label]),
+    [
+      [0, 'Any reward'],
+      [5_000, '$5,000+'],
+      [10_000, '$10,000+'],
+      [20_000, '$20,000+'],
+    ],
+  );
+  assert.deepEqual(
+    ENDS_WITHIN_OPTIONS.map((o) => [o.value, o.label]),
+    [
+      ['any', 'Any deadline'],
+      ['24h', 'Ends in 24h'],
+      ['7d', 'Ends in 7 days'],
+      ['14d', 'Ends in 14 days'],
+    ],
+  );
+  assert.deepEqual(COMPETITION_OPTIONS.map((o) => o.value), ['any', 'low']);
+  assert.equal(MIN_REWARD_OPTIONS[0].value, DEFAULT_PANEL_FILTERS.minReward, 'the first option is the default');
+  assert.equal(ENDS_WITHIN_OPTIONS[0].value, DEFAULT_PANEL_FILTERS.endsWithin);
+});
+
+test('sort is not a filter: it never moves activeFilterCount or isRefined', () => {
+  for (const { value: sort } of SORT_OPTIONS) {
+    const withSort = { ...DEFAULT_BOARD_FILTERS, sort };
+    assert.equal(activeFilterCount(withSort), 0, sort);
+    assert.equal(isRefined(withSort), false, sort);
+    assert.equal(activeFilterCount({ ...withSort, competition: 'low' }), 1, sort);
+    // Re-sorting the filtered list keeps exactly the same members.
+    const filtered = applyBoardFilters(LIST, { ...DEFAULT_BOARD_FILTERS, minReward: 10_000 }, new Set(), NOW);
+    assert.deepEqual(ids(sortBounties(filtered, sort)).sort(), ids(filtered).sort(), sort);
+  }
 });
