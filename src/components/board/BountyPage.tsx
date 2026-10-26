@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type MouseEvent, type ReactNode } from 'react';
-import { formatBountyAmount, formatEndedOn, type BoardBounty, type Submission } from '../../lib/bounty';
+import { formatBountyAmount, formatEndedOn, type BoardBounty } from '../../lib/bounty';
 import { formatCountdown, isExpired, isUrgent, useCountdown } from '../../lib/countdown';
 import { RollingTime } from '../BountyCard';
 import { BountyIcon } from '../BountyIcon';
@@ -8,6 +8,7 @@ import { BountyChat } from './BountyChat';
 import { BountyDescription } from './BountyDescription';
 import { LiveSubmissions } from './LiveSubmissions';
 import { appHref } from '../../lib/paths';
+import { useMyEntries, useProfile } from '../../lib/profile';
 import { ResolutionPanel } from './ResolutionPanel';
 import { SubmissionForm } from './SubmissionForm';
 
@@ -54,7 +55,11 @@ function SubmitEntryLink() {
     e.preventDefault();
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     form.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
-    form.querySelector<HTMLElement>('input:not([disabled]), textarea:not([disabled]), button:not([disabled])')?.focus({ preventScroll: true });
+    // The handle is read-only (it comes from your profile), so focus lands on the first control you can change.
+    const first =
+      form.querySelector<HTMLElement>('input[type="radio"]:checked:not([disabled])') ??
+      form.querySelector<HTMLElement>('input:not([disabled]):not([readonly]), textarea:not([disabled]), button:not([disabled])');
+    first?.focus({ preventScroll: true });
     history.replaceState(history.state, '', '#submit');
   };
   return (
@@ -203,9 +208,10 @@ export function BountyPage({ bounty }: { bounty: BoardBounty }) {
   const aboutId = useId();
   // The live panel's running total, mirrored into the facts' Submissions row (undefined until it first reports).
   const [liveTotal, setLiveTotal] = useState<number>();
-  // The viewer's own entries from the form, oldest first; the live panel lands each new one at its top.
-  const [mine, setMine] = useState<Submission[]>([]);
-  useEffect(() => setMine([]), [bounty.slug]);
+  // Your entries on this bounty (seeds plus what the form recorded, persisted in localStorage), oldest first, under
+  // your current handle. They survive a reload; the live panel interleaves them by time and lands each new one on top.
+  const profile = useProfile();
+  const mine = useMyEntries(bounty.slug);
 
   return (
     <article data-testid="bounty-page" aria-labelledby={`${aboutId}-title`} className="mx-auto w-full max-w-[1350px] px-4 pt-6 pb-16 lg:px-6">
@@ -242,7 +248,7 @@ export function BountyPage({ bounty }: { bounty: BoardBounty }) {
 
           <Facts bounty={bounty} liveTotal={liveTotal} />
 
-          <SubmissionForm bounty={bounty} scrollMargin={top} onSubmitted={(s) => setMine((m) => [...m, s])} />
+          <SubmissionForm bounty={bounty} scrollMargin={top} />
 
           <section aria-labelledby={aboutId} className="flex flex-col gap-3" data-testid="bounty-about">
             <h2 id={aboutId} className="text-heading-xl text-pk-content-primary">
@@ -261,7 +267,7 @@ export function BountyPage({ bounty }: { bounty: BoardBounty }) {
           style={{ ['--side-top' as string]: `${top}px` }}
           className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-(--side-top) lg:max-h-[calc(100dvh-var(--side-top)-16px)] lg:w-[400px] lg:shrink-0 lg:overflow-y-auto lg:overscroll-contain lg:[scrollbar-width:thin] lg:[scrollbar-color:var(--color-pk-gray-300)_transparent]"
         >
-          <LiveSubmissions bounty={bounty} onTotal={setLiveTotal} injected={mine} />
+          <LiveSubmissions bounty={bounty} onTotal={setLiveTotal} injected={mine} viewerHandle={profile.handle} />
         </aside>
       </div>
 

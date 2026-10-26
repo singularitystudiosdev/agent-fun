@@ -4,10 +4,12 @@ import type { BoardBounty } from '../../lib/bounty';
 import { BOARD_TABS, DEFAULT_TAB, tabCounts } from '../../lib/boardTabs';
 import type { BoardTab } from '../../lib/boardTabs';
 import { appHref } from '../../lib/paths';
+import { useProfile } from '../../lib/profile';
+import { Avatar } from '../profile/Avatar';
 
 /*
  * polymarket.com's desktop nav (polymarket-clone/src/components/Header.tsx), rebranded for bounties.
- * Row 1: agent.fun wordmark, 600px search, help + menu (min-h 68px, pt-3 pb-2). Row 2: the h-12 tab rail.
+ * Row 1: agent.fun wordmark, 600px search, help + your avatar (min-h 68px, pt-3 pb-2). Row 2: the h-12 tab rail.
  * The clone styled through polymarket's compiled CSS; every class here is a Tailwind utility or one of our tokens.
  */
 
@@ -44,12 +46,6 @@ const HelpIcon = () => (
   </svg>
 );
 
-const MenuIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" aria-hidden="true" className="size-5">
-    <path fill="currentColor" d="M17.25 12.375a.875.875 0 0 1 0 1.75H2.75a.875.875 0 0 1 0-1.75zm0-6.5a.875.875 0 0 1 0 1.75H2.75a.875.875 0 1 1 0-1.75z" />
-  </svg>
-);
-
 const ChevronIcon = ({ flip = false }: { flip?: boolean }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" aria-hidden="true" className={flip ? 'size-5 rotate-180' : 'size-5'}>
     <path fill="currentColor" d="M7.714 5.214a.877.877 0 0 1 1.238 0l4.166 4.167a.875.875 0 0 1 0 1.237l-4.166 4.167a.876.876 0 0 1-1.238-1.237l3.548-3.55-3.548-3.546a.877.877 0 0 1 0-1.238" />
@@ -74,6 +70,25 @@ const BrandMark = () => (
 );
 
 /* ---- Pieces ---- */
+
+/**
+ * Your avatar, top right at every width: a plain link to /profile (App's router keeps it in place, a modified click opens
+ * a new tab). Polymarket shows the avatar alone, so no name; the ring marks it as the current page on /profile.
+ */
+function ProfileLink({ active }: { active: boolean }) {
+  const profile = useProfile();
+  return (
+    <a
+      href={appHref('/profile')}
+      aria-label="Your profile"
+      data-testid="header-avatar"
+      aria-current={active ? 'page' : undefined}
+      className="inline-flex size-8 shrink-0 items-center justify-center rounded-full outline-none transition-[box-shadow,opacity] duration-[120ms] hover:opacity-90 focus-visible:ring-2 focus-visible:ring-pk-content-secondary focus-visible:ring-offset-2 focus-visible:ring-offset-pk-surface aria-[current=page]:ring-2 aria-[current=page]:ring-pk-content-primary aria-[current=page]:ring-offset-2 aria-[current=page]:ring-offset-pk-surface motion-reduce:transition-none"
+    >
+      <Avatar profile={profile} size={32} />
+    </a>
+  );
+}
 
 const ClearIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" aria-hidden="true" className="size-4">
@@ -141,7 +156,7 @@ function Tab({ id, active, icon, label, count, onSelect }: { id: BoardTab; activ
     <a href={tabHref(id)} onClick={onClick} data-tab={id} aria-current={active ? 'page' : undefined} className={active ? TAB_ACTIVE : TAB_INACTIVE}>
       {icon}
       <span>{label}</span>
-      <span className="text-body-xs font-medium text-pk-content-tertiary tabular-nums" aria-label={`${count} open`}>
+      <span className="text-body-xs font-medium text-pk-content-secondary tabular-nums" aria-label={`${count} open`}>
         {count}
       </span>
     </a>
@@ -156,6 +171,7 @@ export function SiteHeader({
   onTabChange,
   query,
   onQueryChange,
+  profileActive = false,
 }: {
   bounties: BoardBounty[];
   tab: BoardTab | null;
@@ -163,6 +179,8 @@ export function SiteHeader({
   /** The board search, owned by App; typing here filters the grid live. */
   query: string;
   onQueryChange: (next: string) => void;
+  /** On /profile: the avatar link carries aria-current="page". */
+  profileActive?: boolean;
 }) {
   const desktopInputRef = useRef<HTMLInputElement>(null);
   const mobileInputRef = useRef<HTMLInputElement>(null);
@@ -263,9 +281,7 @@ export function SiteHeader({
           <button type="button" aria-label="Help" className={`${ICON_BUTTON} hidden! lg:inline-flex!`}>
             <HelpIcon />
           </button>
-          <button type="button" aria-label="Menu" aria-haspopup="menu" className={`${ICON_BUTTON} hidden! lg:inline-flex!`}>
-            <MenuIcon />
-          </button>
+          <ProfileLink active={profileActive} />
         </div>
       </div>
 

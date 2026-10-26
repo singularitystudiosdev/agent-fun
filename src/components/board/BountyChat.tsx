@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type { BoardBounty, ChatMessage } from '../../lib/bounty';
+import { appHref } from '../../lib/paths';
+import { useProfile } from '../../lib/profile';
 
 /** Textarea grows with its content up to this many lines (text-body-base: 20px line height), then scrolls. */
 const MAX_LINES = 4;
@@ -43,20 +45,30 @@ const ROLE_BADGE: Partial<Record<ChatMessage['role'], { label: string; className
   sponsor: { label: 'Sponsor', className: 'bg-pk-blue-100 text-pk-brand-500' },
 };
 
-function Message({ message, now }: { message: ChatMessage; now: number }) {
+/** Your own message: posted under your current handle, or sent from this page (its id carries `-you-`). */
+const isOwn = (message: ChatMessage, handle: string): boolean => message.author === handle || message.id.includes('-you-');
+
+function Message({ message, now, isYou }: { message: ChatMessage; now: number; isYou: boolean }) {
   const badge = ROLE_BADGE[message.role];
-  const initial = (message.author.trim()[0] ?? '?').toUpperCase();
   return (
-    <li className="flex gap-2.5 px-4 py-2.5">
-      <span
-        aria-hidden="true"
-        className="flex size-7 shrink-0 items-center justify-center rounded-full bg-pk-gray-100 text-body-sm font-semibold text-pk-content-secondary"
-      >
-        {initial}
-      </span>
+    <li className="flex px-4 py-2.5">
       <div className="min-w-0 flex-1">
         <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-body-sm">
-          <span className="truncate font-semibold text-pk-content-primary">{message.author}</span>
+          {isYou ? (
+            <>
+              <a
+                href={appHref('/profile')}
+                className="truncate rounded-sm font-semibold text-pk-content-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-pk-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-pk-surface"
+              >
+                {message.author}
+              </a>
+              <span className="text-pk-content-tertiary" data-testid="chat-message-you">
+                (you)
+              </span>
+            </>
+          ) : (
+            <span className="truncate font-semibold text-pk-content-primary">{message.author}</span>
+          )}
           {badge && (
             <span className={`rounded-full px-1.5 py-px text-body-xs font-medium ${badge.className}`}>{badge.label}</span>
           )}
@@ -71,6 +83,7 @@ function Message({ message, now }: { message: ChatMessage; now: number }) {
 }
 
 function Chat({ bounty }: { bounty: BoardBounty }) {
+  const { handle } = useProfile();
   const [added, setAdded] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [announcement, setAnnouncement] = useState('');
@@ -127,7 +140,7 @@ function Chat({ bounty }: { bounty: BoardBounty }) {
     const body = draft.trim();
     if (!body) return;
     const n = ++seq.current;
-    push({ id: `${bounty.slug}-you-${n}`, author: 'you', role: 'hunter', body, createdAt: new Date().toISOString() });
+    push({ id: `${bounty.slug}-you-${n}`, author: handle, role: 'hunter', body, createdAt: new Date().toISOString() });
     setDraft('');
     // Exactly one sponsor acknowledgement per message sent.
     const t = window.setTimeout(() => {
@@ -190,7 +203,7 @@ function Chat({ bounty }: { bounty: BoardBounty }) {
         >
           <ol>
             {messages.map((m) => (
-              <Message key={m.id} message={m} now={now} />
+              <Message key={m.id} message={m} now={now} isYou={isOwn(m, handle)} />
             ))}
           </ol>
         </div>

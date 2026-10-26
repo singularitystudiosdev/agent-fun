@@ -1,5 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode, type RefObject } from 'react';
 import { formatEndedOn, type BoardBounty, type Submission } from '../../lib/bounty';
+import { appHref } from '../../lib/paths';
+import { recordEntry, useProfile } from '../../lib/profile';
 import {
   buildSubmission,
   emptyValues,
@@ -21,8 +23,9 @@ import {
  * fields `submissionSpec` picks for the bounty's resolution method: a pinned commit, a wallet and its transactions, a
  * registered run, deliverable links or a proof link), Result (an optional self-reported score in the metric's unit,
  * run logs, the approach) and Rules (attest to the criteria and to sharing the artifacts). Validates on blur and on
- * submit, focuses the first invalid field, and on success swaps itself for a receipt and reports the entry upward so
- * the live feed can show it. Nothing leaves the browser.
+ * submit, focuses the first invalid field, and on success records the entry on your profile (localStorage, so Live
+ * submissions and /profile show it after a reload) and swaps itself for a receipt. The handle is your profile's,
+ * read-only here. Nothing leaves the browser.
  */
 
 const FOCUS_RING = 'outline-none focus-visible:ring-2 focus-visible:ring-pk-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-pk-surface';
@@ -32,6 +35,7 @@ const LABEL = 'text-body-sm font-semibold text-pk-content-primary';
 const HELP = 'text-body-xs text-pk-content-secondary text-pretty';
 const SECTION = 'flex min-w-0 flex-col gap-4 border-t border-pk-border px-5 py-5';
 const PRIMARY_BUTTON = `inline-flex h-10 cursor-pointer items-center justify-center rounded-md bg-pk-brand-500 px-5 text-body-base font-semibold text-pk-elevated transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:bg-pk-gray-200 disabled:text-pk-content-tertiary disabled:hover:opacity-100 motion-reduce:transition-none ${FOCUS_RING}`;
+const TEXT_LINK = `rounded-sm text-body-sm font-semibold text-pk-brand-500 hover:underline ${FOCUS_RING}`;
 const SECONDARY_BUTTON = `inline-flex h-10 cursor-pointer items-center justify-center rounded-md border border-pk-border bg-pk-elevated px-4 text-body-base font-semibold text-pk-content-primary transition-colors hover:bg-pk-hover-overlay-darker motion-reduce:transition-none ${FOCUS_RING}`;
 
 function Glyph({ children, className = 'size-4 shrink-0' }: { children: ReactNode; className?: string }) {
@@ -157,13 +161,14 @@ export function SubmissionForm({ bounty, onSubmitted, scrollMargin }: Submission
   const titleId = `${uid}-title`;
   const spec = useMemo(() => submissionSpec(bounty), [bounty]);
   const ended = useEnded(bounty.deadline);
-  const [values, setValues] = useState<SubmissionValues>(() => emptyValues(spec));
+  const profile = useProfile();
+  const [values, setValues] = useState<SubmissionValues>(() => emptyValues(spec, profile.handle));
   const [shown, setShown] = useState<Set<string>>(() => new Set());
   const [submitted, setSubmitted] = useState(false);
   const [receipt, setReceipt] = useState<Submission | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const receiptRef = useRef<HTMLHeadingElement>(null);
-  const firstFieldRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const focusAfter = useRef<'receipt' | 'form' | null>(null);
 
   // A different bounty (or its spec hot-reloading) starts clean.
@@ -174,9 +179,15 @@ export function SubmissionForm({ bounty, onSubmitted, scrollMargin }: Submission
     setReceipt(null);
   }, [spec]);
 
+  // The handle is the profile's: a rename (here or in another tab) follows into the form.
+  useEffect(() => {
+    setValues((p) => (p.handle === profile.handle ? p : { ...p, handle: profile.handle }));
+  }, [profile.handle]);
+
   useEffect(() => {
     if (focusAfter.current === 'receipt') receiptRef.current?.focus();
-    if (focusAfter.current === 'form') firstFieldRef.current?.focus();
+    // The handle is read-only, so "Submit another" starts on the first control you can change: the entrant type.
+    if (focusAfter.current === 'form') formRef.current?.querySelector<HTMLInputElement>('input[type="radio"]:checked')?.focus();
     focusAfter.current = null;
   }, [receipt]);
 
@@ -211,6 +222,18 @@ export function SubmissionForm({ bounty, onSubmitted, scrollMargin }: Submission
       return;
     }
     const s = buildSubmission(spec, bounty.slug, values);
+    // Persist it on your profile: Live submissions (via useMyEntries) and /profile pick it up from the change event.
+    const selfScore = values.score.trim() ? Number(values.score.replace(/,/g, '')) : undefined;
+    recordEntry({
+      id: s.id!,
+      bountySlug: bounty.slug,
+      submittedAt: s.createdAt,
+      selfScore: selfScore !== undefined && Number.isFinite(selfScore) ? selfScore : undefined,
+      agent: Boolean(s.agent),
+      agentName: values.agentName.trim() || undefined,
+      title: s.title,
+      link: s.link,
+    });
     focusAfter.current = 'receipt';
     setReceipt(s);
     onSubmitted?.(s);
@@ -263,25 +286,34 @@ export function SubmissionForm({ bounty, onSubmitted, scrollMargin }: Submission
       {receipt ? (
         <Receipt receipt={receipt} bounty={bounty} headingRef={receiptRef} onAnother={submitAnother} />
       ) : (
-        <form noValidate onSubmit={onSubmit} aria-labelledby={titleId} data-testid="submission-form-fields">
+        <form ref={formRef} noValidate onSubmit={onSubmit} aria-labelledby={titleId} data-testid="submission-form-fields">
           <fieldset disabled={ended} className="min-w-0 disabled:opacity-60">
             {/* 1. Entrant */}
             <Section id={dom('s1')} n={1} title="Entrant">
               <div className="grid gap-4 sm:grid-cols-2">
-                <FieldShell id={dom('handle')} label="Your handle" error={err('handle')}>
+                <FieldShell
+                  id={dom('handle')}
+                  label="Your handle"
+                  error={err('handle')}
+                  aside={
+                    <a href={appHref('/profile?edit=1')} className={TEXT_LINK} data-testid="submission-edit-profile">
+                      Edit profile
+                    </a>
+                  }
+                >
                   <div className="relative">
                     <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-body-base text-pk-content-tertiary">
                       @
                     </span>
                     <input
-                      ref={firstFieldRef}
                       {...a11y('handle')}
                       name="handle"
+                      readOnly
                       autoComplete="username"
                       spellCheck={false}
                       value={values.handle}
-                      onChange={(e) => set('handle', e.target.value)}
-                      className={`${INPUT} h-10 pl-7`}
+                      data-testid="submission-handle"
+                      className={`${INPUT} h-10 cursor-default bg-pk-gray-100! pl-7 hover:border-pk-border`}
                     />
                   </div>
                 </FieldShell>
@@ -626,10 +658,13 @@ function Receipt({
         </ol>
       </div>
 
-      <div>
+      <div className="flex flex-wrap items-center gap-4">
         <button type="button" onClick={onAnother} className={SECONDARY_BUTTON} data-testid="submission-another">
           Submit another
         </button>
+        <a href={appHref('/profile')} className={TEXT_LINK} data-testid="submission-profile-link">
+          View on your profile
+        </a>
       </div>
     </div>
   );

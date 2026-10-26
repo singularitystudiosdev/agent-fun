@@ -1,0 +1,430 @@
+import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { BountyIcon } from '../BountyIcon';
+import { SelectMenu, type SelectMenuOption } from '../board/SelectMenu';
+import { bountyPath, formatBountyAmount, type BoardBounty } from '../../lib/bounty';
+import { BOARD_BOUNTIES } from '../../lib/bountyData';
+import { appHref } from '../../lib/paths';
+import { formatScore, formatTimeLeft, ordinal, rankOf, scoreDecimals, standingCopy, toSubmissions, type Entry, type PastResult, type Standing, type StandingCopy } from '../../lib/profile';
+import {
+  CheckCircleFilledGlyph,
+  CheckCircleGlyph,
+  ClearGlyph,
+  EMPTY_ACTION,
+  EmptyState,
+  FlagGlyph,
+  FOCUS_RING,
+  ListHeader,
+  MedalGlyph,
+  Meta,
+  MinusCircleGlyph,
+  PAGE_SIZE,
+  Pill,
+  SearchGlyph,
+  ShowMore,
+} from './glyphs';
+
+/**
+ * The Entries tab: polymarket's Positions panel for bounties. An Active | Ended toggle, a search and a sort, then
+ * Active rows (one per bounty still on the board, ranked by the shared standings engine) or Ended rows (past results,
+ * not links: the bounty is off the board). Active rows are the only place a bounty meme appears on the profile.
+ */
+
+type Status = 'active' | 'ended';
+type ActiveSort = 'rank' | 'ending' | 'prize';
+type EndedSort = 'recent' | 'payout' | 'rank';
+
+const ACTIVE_SORTS: readonly SelectMenuOption<ActiveSort>[] = [
+  { value: 'rank', label: 'Rank' },
+  { value: 'ending', label: 'Ending soon' },
+  { value: 'prize', label: 'Prize now' },
+];
+const ENDED_SORTS: readonly SelectMenuOption<EndedSort>[] = [
+  { value: 'recent', label: 'Most recent' },
+  { value: 'payout', label: 'Payout' },
+  { value: 'rank', label: 'Final rank' },
+];
+
+const DAY_MS = 86_400_000;
+const ACTIVE_GRID = 'md:grid-cols-[minmax(0,1fr)_104px_148px_88px_96px]';
+const ENDED_GRID = 'md:grid-cols-[96px_minmax(0,1fr)_104px_112px_96px]';
+const ENDED_ON = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
+
+export interface ActiveRow {
+  bounty: BoardBounty;
+  standing: Standing;
+  copy: StandingCopy;
+  deadline: number;
+  /** Paid places, e.g. 3 for rewards {1,2,3}. */
+  places: number;
+}
+
+/** One row per bounty you entered that the board still lists. */
+export function activeRows(entries: Entry[], handle: string, bounties: BoardBounty[] = BOARD_BOUNTIES): ActiveRow[] {
+  const bySlug = new Map(bounties.map((b) => [b.slug, b]));
+  const slugs = [...new Set(entries.map((e) => e.bountySlug))].filter((s) => bySlug.has(s));
+  return slugs.map((slug) => {
+    const bounty = bySlug.get(slug)!;
+    const standing = rankOf(bounty, handle, toSubmissions(entries, slug, handle));
+    return { bounty, standing, copy: standingCopy(standing, bounty), deadline: Date.parse(bounty.deadline), places: Object.keys(bounty.rewards ?? {}).length };
+  });
+}
+
+/** Rank order: ranked ascending, then in flight, then unranked. */
+const stateOrder = (s: Standing): number => (s.kind === 'ranked' ? s.rank : s.kind === 'inflight' ? 10_000 : 20_000);
+const prizeOf = (s: Standing): number => (s.kind === 'ranked' ? s.prize : 0);
+
+export function sortActive(rows: ActiveRow[], sort: ActiveSort): ActiveRow[] {
+  const byRank = (a: ActiveRow, b: ActiveRow) => stateOrder(a.standing) - stateOrder(b.standing) || a.deadline - b.deadline;
+  const cmp =
+    sort === 'ending' ? (a: ActiveRow, b: ActiveRow) => a.deadline - b.deadline || byRank(a, b) : sort === 'prize' ? (a: ActiveRow, b: ActiveRow) => prizeOf(b.standing) - prizeOf(a.standing) || byRank(a, b) : byRank;
+  return [...rows].sort(cmp);
+}
+
+export function sortEnded(rows: PastResult[], sort: EndedSort): PastResult[] {
+  const recent = (a: PastResult, b: PastResult) => Date.parse(b.endedAt) - Date.parse(a.endedAt);
+  const cmp =
+    sort === 'payout' ? (a: PastResult, b: PastResult) => b.payout - a.payout || recent(a, b) : sort === 'rank' ? (a: PastResult, b: PastResult) => a.finalRank - b.finalRank || b.fieldSize - a.fieldSize : recent;
+  return [...rows].sort(cmp);
+}
+
+const matches = (title: string, q: string) => title.toLowerCase().includes(q.trim().toLowerCase());
+
+export function EntriesPanel({ entries, past, handle, now }: { entries: Entry[]; past: PastResult[]; handle: string; now: number }) {
+  const [status, setStatus] = useState<Status>('active');
+  const [query, setQuery] = useState('');
+  const [activeSort, setActiveSort] = useState<ActiveSort>('rank');
+  const [endedSort, setEndedSort] = useState<EndedSort>('recent');
+  const [shown, setShown] = useState(PAGE_SIZE);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  const active = useMemo(() => activeRows(entries, handle), [entries, handle]);
+  const activeShown = useMemo(() => sortActive(active.filter((r) => matches(r.bounty.title, query)), activeSort), [active, query, activeSort]);
+  const endedShown = useMemo(() => sortEnded(past.filter((p) => matches(p.title, query)), endedSort), [past, query, endedSort]);
+
+  const pick = (next: Status) => {
+    setStatus(next);
+    setShown(PAGE_SIZE);
+  };
+  const search = (q: string) => {
+    setQuery(q);
+    setShown(PAGE_SIZE);
+  };
+  const clearSearch = () => {
+    search('');
+    searchRef.current?.focus();
+  };
+
+  const total = status === 'active' ? active.length : past.length;
+  const list = status === 'active' ? activeShown : endedShown;
+
+  let body: ReactNode;
+  if (total === 0) {
+    body = (
+      <EmptyState
+        sentence={status === 'active' ? 'No active entries yet.' : 'No ended bounties yet.'}
+        action={
+          <a href={appHref('/')} className={EMPTY_ACTION}>
+            Browse bounties
+          </a>
+        }
+      />
+    );
+  } else if (list.length === 0) {
+    body = (
+      <EmptyState
+        sentence={`No entries match "${query.trim()}".`}
+        action={
+          <button type="button" onClick={clearSearch} className={EMPTY_ACTION}>
+            Clear search
+          </button>
+        }
+      />
+    );
+  } else if (status === 'active') {
+    body = (
+      <>
+        <ListHeader
+          grid={ACTIVE_GRID}
+          columns={[{ label: 'Bounty' }, { label: 'Your best', end: true }, { label: 'Rank', end: true }, { label: 'Ends in', end: true }, { label: 'Prize now', end: true }]}
+        />
+        <ul aria-label="Active entries" className="flex flex-col">
+          {activeShown.slice(0, shown).map((r) => (
+            <ActiveItem key={r.bounty.slug} row={r} now={now} />
+          ))}
+        </ul>
+      </>
+    );
+  } else {
+    body = (
+      <>
+        <ListHeader
+          grid={ENDED_GRID}
+          columns={[{ label: 'Result' }, { label: 'Bounty' }, { label: 'Final rank', end: true }, { label: 'Your score', end: true }, { label: 'Payout', end: true }]}
+        />
+        <ul aria-label="Ended bounties" className="flex flex-col">
+          {endedShown.slice(0, shown).map((p) => (
+            <EndedItem key={p.id} result={p} />
+          ))}
+        </ul>
+      </>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2 md:flex-row">
+        <div role="group" aria-label="Entry status" className="flex h-10 shrink-0 gap-0.5 rounded-md border border-pk-border p-0.5">
+          <StatusChip label="Active" count={active.length} pressed={status === 'active'} onClick={() => pick('active')} testId="profile-status-active" />
+          <StatusChip label="Ended" count={past.length} pressed={status === 'ended'} onClick={() => pick('ended')} testId="profile-status-ended" />
+        </div>
+        <div className="flex min-w-0 flex-1 gap-2">
+          <label className="flex h-10 min-w-0 flex-1 cursor-text items-center gap-1 rounded-md border border-pk-gray-200 bg-pk-surface px-2.5 transition-colors motion-reduce:transition-none hover:border-pk-gray-300 focus-within:border-pk-gray-300 focus-within:ring-2 focus-within:ring-pk-content-secondary/40">
+            <span className="shrink-0 text-pk-content-secondary">
+              <SearchGlyph />
+            </span>
+            <input
+              ref={searchRef}
+              type="search"
+              autoComplete="off"
+              aria-label="Search entries"
+              placeholder="Search entries"
+              value={query}
+              onChange={(e) => search(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape' && query) {
+                  e.preventDefault();
+                  search('');
+                }
+              }}
+              data-testid="profile-search"
+              className="min-w-0 flex-1 bg-transparent px-1 text-body-base text-pk-content-primary outline-none focus-visible:outline-none placeholder:text-pk-content-tertiary max-md:text-[16px] [&::-webkit-search-cancel-button]:appearance-none"
+            />
+            {query && (
+              <button
+                type="button"
+                aria-label="Clear search"
+                onClick={clearSearch}
+                className="-mr-1 inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-pk-content-secondary outline-none transition-colors motion-reduce:transition-none hover:bg-pk-hover-overlay-darker hover:text-pk-content-primary focus-visible:ring-2 focus-visible:ring-pk-content-secondary"
+              >
+                <ClearGlyph />
+              </button>
+            )}
+          </label>
+          {status === 'active' ? (
+            <SelectMenu label="Sort by" testId="profile-sort" value={activeSort} options={ACTIVE_SORTS} onChange={setActiveSort} />
+          ) : (
+            <SelectMenu label="Sort by" testId="profile-sort" value={endedSort} options={ENDED_SORTS} onChange={setEndedSort} />
+          )}
+        </div>
+      </div>
+
+      <div data-testid={status === 'active' ? 'profile-active-list' : 'profile-ended-list'} data-status={status}>
+        {body}
+        {list.length > shown && <ShowMore remaining={list.length - shown} onClick={() => setShown((n) => n + PAGE_SIZE)} />}
+      </div>
+    </div>
+  );
+}
+
+function StatusChip({ label, count, pressed, onClick, testId }: { label: string; count: number; pressed: boolean; onClick: () => void; testId: string }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      onClick={onClick}
+      data-testid={testId}
+      className={`inline-flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 text-body-base font-semibold transition-colors motion-reduce:transition-none md:flex-none ${FOCUS_RING} ${
+        pressed ? 'bg-pk-gray-100 text-pk-content-primary' : 'text-pk-content-secondary hover:text-pk-content-primary'
+      }`}
+    >
+      {label}
+      <span className="text-body-sm text-pk-content-secondary tabular-nums">{count}</span>
+    </button>
+  );
+}
+
+/** A cell's caption: visible above the value on phones, read-only to assistive tech on desktop (where the header row shows it). */
+function CellLabel({ children }: { children: ReactNode }) {
+  return <span className="text-body-xs text-pk-content-secondary md:sr-only">{children}</span>;
+}
+
+const CELL = 'flex min-w-0 flex-col gap-0.5 md:items-end md:text-right';
+const VALUE = 'text-body-base font-semibold text-pk-content-primary tabular-nums';
+const SUB = 'text-body-sm text-pk-content-secondary';
+
+function ActiveItem({ row, now }: { row: ActiveRow; now: number }) {
+  const { bounty, standing, copy } = row;
+  const metric = bounty.resolution.metric;
+  const dp = scoreDecimals(bounty);
+  const fmt = (x: number) => (metric ? formatScore(x, metric, dp) : String(x));
+  const left = row.deadline - now;
+  const urgent = left > 0 && left < DAY_MS;
+  const endsIn = formatTimeLeft(left);
+  const prize = prizeOf(standing);
+  const rank = standing.kind === 'ranked' ? standing.rank : undefined;
+
+  let best: ReactNode;
+  let bestSub: string | null = null;
+  if (standing.kind === 'ranked') {
+    best = fmt(standing.score);
+    if (standing.entries > 1) bestSub = `Best of ${standing.entries}`;
+  } else if (standing.kind === 'inflight' && standing.selfScore !== undefined) {
+    best = fmt(standing.selfScore);
+    bestSub = 'Self-reported';
+  } else {
+    best = <span className="text-pk-content-secondary">No score yet</span>;
+  }
+
+  return (
+    <li>
+      <a
+        href={bountyPath(bounty.slug)}
+        data-testid="profile-active-row"
+        data-slug={bounty.slug}
+        data-state={standing.kind}
+        data-rank={rank}
+        className={`grid min-h-16 grid-cols-3 gap-x-3 gap-y-3 rounded-md px-3 py-3 transition-colors hover:bg-pk-gray-100 motion-reduce:transition-none md:items-center ${ACTIVE_GRID} ${FOCUS_RING}`}
+      >
+        <span className="col-span-3 flex min-w-0 items-center gap-3 md:col-span-1">
+          <span className="relative size-10 shrink-0 overflow-hidden rounded-md bg-pk-gray-100">
+            <BountyIcon bounty={bounty} size={40} />
+          </span>
+          <span className="flex min-w-0 flex-col gap-0.5">
+            <span className="line-clamp-2 text-body-base font-semibold text-pk-content-primary">{bounty.title}</span>
+            <span className={SUB}>
+              <span className="hidden md:block">
+                <Meta parts={[metric?.name ?? 'Verified entry', metric ? `${metric.better} wins` : null]} />
+              </span>
+              <span className="md:hidden">
+                <Meta parts={[metric?.name ?? 'Verified entry', <span className={urgent ? 'text-pk-red-500' : ''}>{left > 0 ? `Ends in ${endsIn}` : 'Ended'}</span>]} />
+              </span>
+            </span>
+          </span>
+        </span>
+
+        <span className={CELL}>
+          <CellLabel>Your best</CellLabel>
+          <span data-testid="profile-active-best" className={VALUE}>
+            {best}
+          </span>
+          {bestSub && <span className={SUB}>{bestSub}</span>}
+        </span>
+
+        <span className={CELL}>
+          <CellLabel>Rank</CellLabel>
+          <span className="flex flex-wrap items-center gap-1.5 md:justify-end">
+            {standing.kind === 'inflight' && copy.pill ? (
+              // In flight, the status is the rank: one pill, not the word twice.
+              <span data-testid="profile-active-rank" className="inline-flex">
+                <Pill tone={copy.pill} />
+              </span>
+            ) : (
+              <>
+                <span data-testid="profile-active-rank" className={`${VALUE} ${standing.kind === 'unranked' ? 'text-pk-content-secondary' : ''}`}>
+                  {copy.rank}
+                </span>
+                {copy.pill && <Pill tone={copy.pill} />}
+              </>
+            )}
+          </span>
+          <span data-testid="profile-active-gap" className={`${SUB} text-pretty`}>
+            {copy.detail}
+          </span>
+        </span>
+
+        <span className={`${CELL} hidden md:flex`}>
+          <CellLabel>Ends in</CellLabel>
+          <span className={`${VALUE} ${urgent ? 'text-pk-red-500' : ''}`}>{endsIn}</span>
+        </span>
+
+        <span className={CELL}>
+          <CellLabel>Prize now</CellLabel>
+          <span data-testid="profile-active-prize" className={`${VALUE} ${prize > 0 ? '' : 'text-pk-content-secondary'}`}>
+            {formatBountyAmount(prize)}
+          </span>
+          <span className={SUB}>{prize > 0 && rank ? `${ordinal(rank)} place` : row.places > 1 ? `Top ${row.places} paid` : row.places === 1 ? 'Winner paid' : 'No prize'}</span>
+        </span>
+      </a>
+    </li>
+  );
+}
+
+function ResultMark({ rank }: { rank: number }) {
+  if (rank === 1)
+    return (
+      <span className="flex items-center gap-1.5 text-body-base font-semibold text-pk-green-600">
+        <CheckCircleFilledGlyph />
+        Won
+      </span>
+    );
+  if (rank <= 3)
+    return (
+      <span className="flex items-center gap-1.5 text-body-base font-semibold text-pk-content-primary">
+        <CheckCircleGlyph className="size-4 text-pk-gray-500" />
+        {ordinal(rank)} place
+      </span>
+    );
+  return (
+    <span className="flex items-center gap-1.5 text-body-base font-semibold text-pk-content-secondary">
+      <MinusCircleGlyph />
+      Unplaced
+    </span>
+  );
+}
+
+const MEDAL = ['text-pk-chart-3', 'text-pk-gray-400', 'text-pk-chart-4'];
+
+function EndedItem({ result: p }: { result: PastResult }) {
+  const result = p.finalRank === 1 ? 'won' : p.finalRank <= 3 ? 'placed' : 'unplaced';
+  const score = formatScore(p.score, p.metric, p.dp);
+  const ended = `Ended ${ENDED_ON.format(new Date(p.endedAt))}`;
+  const entrants = `${p.fieldSize.toLocaleString('en-US')} entrants`;
+  return (
+    <li
+      data-testid="profile-ended-row"
+      data-id={p.id}
+      data-result={result}
+      className={`grid min-h-16 grid-cols-3 gap-x-3 gap-y-3 rounded-md px-3 py-3 odd:bg-pk-gray-100/60 md:items-center ${ENDED_GRID}`}
+    >
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <CellLabel>Result</CellLabel>
+        <ResultMark rank={p.finalRank} />
+      </span>
+
+      <span className="order-first col-span-3 flex min-w-0 items-center gap-3 md:order-none md:col-span-1">
+        <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-md bg-pk-gray-100">
+          {p.finalRank <= 3 ? <MedalGlyph className={`size-6 ${MEDAL[p.finalRank - 1]}`} /> : <FlagGlyph className="size-5 text-pk-gray-500" />}
+        </span>
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <span className="line-clamp-2 text-body-base font-semibold text-pk-content-primary">{p.title}</span>
+          <span className={SUB}>
+            <span className="hidden md:block">
+              <Meta parts={[entrants, ended]} />
+            </span>
+            <span className="md:hidden">
+              <Meta parts={[`Your score ${score}`, entrants, ended]} />
+            </span>
+          </span>
+        </span>
+      </span>
+
+      <span className={CELL}>
+        <CellLabel>Final rank</CellLabel>
+        <span className={VALUE}>
+          #{p.finalRank} of {p.fieldSize.toLocaleString('en-US')}
+        </span>
+      </span>
+
+      <span className={`${CELL} hidden md:flex`}>
+        <CellLabel>Your score</CellLabel>
+        <span className={VALUE}>{score}</span>
+        {p.finalRank > 1 && <span className={SUB}>1st: {formatScore(p.firstScore, p.metric, p.dp)}</span>}
+      </span>
+
+      <span className={CELL}>
+        <CellLabel>Payout</CellLabel>
+        <span className={`${VALUE} ${p.payout > 0 ? 'text-pk-green-600' : 'text-pk-content-secondary'}`}>{p.payout > 0 ? `+${formatBountyAmount(p.payout)}` : formatBountyAmount(0)}</span>
+      </span>
+    </li>
+  );
+}

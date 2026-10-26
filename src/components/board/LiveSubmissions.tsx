@@ -5,8 +5,9 @@ import type { BoardBounty, Submission } from '../../lib/bounty';
  * LIVE SUBMISSIONS: a bounty page's right column. A header (title, running total) over one list of who submitted,
  * newest first: "@handle" on the left, the relative time on the right. While the bounty is open and the tab is
  * visible, a client-side stream (deterministic from slug + tick) lands the first arrival 1.5 to 3 s after the page
- * opens, then one every 2.5 to 6 s. The viewer's own entries (`injected`, from the submission form) land at the top the
- * same way, marked with a muted "(you)". Each arrival opens its row (grid-rows 0fr -> 1fr, so the rows below glide
+ * opens, then one every 2.5 to 6 s. The viewer's own entries (`injected`: seeds plus what the form recorded, persisted)
+ * sit in the list at their real times, marked with a muted "(you)"; a new one is the newest, so it lands on top like any
+ * arrival. Each arrival opens its row (grid-rows 0fr -> 1fr, so the rows below glide
  * down), slides down and fades in over 300 ms, and holds a pk-blue-100 highlight that fades out by about 2 s. Under
  * reduced motion rows just appear.
  */
@@ -38,6 +39,8 @@ function mulberry32(seed: number): Rand {
 }
 const pick = <T,>(xs: readonly T[], rand: Rand): T => xs[Math.floor(rand() * xs.length) % xs.length];
 
+const byNewest = (a: { createdAt: string }, b: { createdAt: string }) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0);
+
 /** Delay before stream tick `n` fires: 1.5 to 3 s for the first, then 2.5 to 6 s; deterministic from slug + tick. */
 export const streamDelay = (slug: string, n: number): number => {
   const r = mulberry32(fnv1a(`${slug}#delay#${n}`))();
@@ -58,19 +61,21 @@ interface Row {
   you?: boolean;
 }
 
-/** One arrival for stream tick `n`: about half agents; an existing hunter about 45% of the time, else a new name. */
-function makeArrival(slug: string, n: number, existing: readonly Row[], at: number): Row {
+/**
+ * One arrival for stream tick `n`: about half agents; an existing hunter about 45% of the time, else a new name. Never
+ * the viewer: their handle (and any handle on their own rows) is skipped, in the known hunters and in the name pools.
+ */
+function makeArrival(slug: string, n: number, existing: readonly Row[], at: number, viewerHandle?: string): Row {
   const rand = mulberry32(fnv1a(`${slug}#arrival#${n}`));
   const agent = rand() < 0.5;
   const prev = existing[0]?.hunter;
-  // Never echo the viewer's own handle back as a stranger's arrival.
   const mine = new Set(existing.filter((r) => r.you).map((r) => r.hunter));
+  if (viewerHandle) mine.add(viewerHandle);
   const known = [...new Set(existing.filter((r) => r.agent === agent && r.hunter !== prev && !mine.has(r.hunter)).map((r) => r.hunter))];
-  let hunter = known.length > 0 && rand() < 0.45 ? pick(known, rand) : pick(agent ? NEW_AGENTS : NEW_HUMANS, rand);
-  if (hunter === prev) {
-    const pool = agent ? NEW_AGENTS : NEW_HUMANS;
-    hunter = pool[(pool.indexOf(hunter as never) + 1) % pool.length];
-  }
+  const pool: readonly string[] = agent ? NEW_AGENTS : NEW_HUMANS;
+  let hunter = known.length > 0 && rand() < 0.45 ? pick(known, rand) : pick(pool, rand);
+  // Step through the pool past the previous arrival and the viewer (the pool always has a free name).
+  for (let i = 0; (hunter === prev || mine.has(hunter)) && i < pool.length; i++) hunter = pool[(pool.indexOf(hunter) + 1) % pool.length];
   return { key: `${slug}-live-${n}`, hunter, agent, createdAt: new Date(at).toISOString(), live: true };
 }
 
@@ -145,23 +150,32 @@ interface LiveSubmissionsProps {
   bounty: BoardBounty;
   /** Reports the running total (the data's count plus live arrivals plus the viewer's own) so the page can show it too. */
   onTotal?: (n: number) => void;
-  /** The viewer's own submissions from the submission form, newest last. Each new item lands at the top. */
+  /** The viewer's own submissions (seeds plus form entries), newest last. Shown at their times; each new item lands on top. */
   injected?: Submission[];
+  /** The viewer's current handle: labels their rows and is never used for a stream arrival. */
+  viewerHandle?: string;
 }
 
-export function LiveSubmissions({ bounty, onTotal, injected }: LiveSubmissionsProps) {
-  // Remount (fresh state, every timer cleared) when the bounty changes or its data hot-reloads. `injected` is watched
-  // inside, never part of the key.
-  return <LiveSubmissionsPanel key={`${bounty.slug}:${bounty.submissions?.length ?? 0}`} bounty={bounty} onTotal={onTotal} injected={injected} />;
+export function LiveSubmissions({ bounty, onTotal, injected, viewerHandle }: LiveSubmissionsProps) {
+  // Remount (fresh state, every timer cleared) when the bounty changes or its data hot-reloads. `injected` and
+  // `viewerHandle` are watched inside, never part of the key.
+  return (
+    <LiveSubmissionsPanel key={`${bounty.slug}:${bounty.submissions?.length ?? 0}`} bounty={bounty} onTotal={onTotal} injected={injected} viewerHandle={viewerHandle} />
+  );
 }
 
-function LiveSubmissionsPanel({ bounty, onTotal, injected }: LiveSubmissionsProps) {
+function LiveSubmissionsPanel({ bounty, onTotal, injected, viewerHandle }: LiveSubmissionsProps) {
   const slug = bounty.slug || bounty.id;
   const deadlineMs = Date.parse(bounty.deadline);
   const [now, setNow] = useState(() => Date.now());
-  // Entries already in `injected` at mount (a remount after a data hot-reload) show at once, without the entrance.
+  // Entries already in `injected` at mount (persisted ones after a reload, the seeds) show at once, without the entrance,
+  // each at its own time among everyone else's (a stable sort keeps equal times in their given order).
   const [initialMine] = useState(() => takeInjected(injected, 0, slug, false));
-  const [rows, setRows] = useState<Row[]>(() => [...initialMine.rows, ...toRows(bounty.submissions ?? [], slug)].slice(0, MAX_ROWS));
+  const [rows, setRows] = useState<Row[]>(() => [...initialMine.rows, ...toRows(bounty.submissions ?? [], slug)].sort(byNewest).slice(0, MAX_ROWS));
+  const viewerRef = useRef(viewerHandle);
+  useEffect(() => {
+    viewerRef.current = viewerHandle;
+  }, [viewerHandle]);
   const [added, setAdded] = useState(0);
   const [announcement, setAnnouncement] = useState('');
   const [fresh, setFresh] = useState<ReadonlySet<string>>(() => new Set());
@@ -213,7 +227,7 @@ function LiveSubmissionsPanel({ bounty, onTotal, injected }: LiveSubmissionsProp
     [later, announce],
   );
 
-  // The viewer's own entries: each new item in `injected` lands at the top like any arrival.
+  // The viewer's own entries: each new item in `injected` (a fresh submit, so the newest) lands on top like any arrival.
   const seenMine = useRef(initialMine.seen);
   useEffect(() => {
     const { rows: mine, seen } = takeInjected(injected, seenMine.current, slug, true);
@@ -252,7 +266,7 @@ function LiveSubmissionsPanel({ bounty, onTotal, injected }: LiveSubmissionsProp
         setNow(at);
         return;
       }
-      const row = makeArrival(slug, tick.current++, rowsRef.current, at);
+      const row = makeArrival(slug, tick.current++, rowsRef.current, at, viewerRef.current);
       land(row, at, `@${row.hunter} submitted`);
       schedule();
     };
@@ -322,7 +336,7 @@ function LiveSubmissionsPanel({ bounty, onTotal, injected }: LiveSubmissionsProp
           tabIndex={0}
         >
           {rows.map((r) => (
-            <FeedRow key={r.key} row={r} now={now} fresh={fresh.has(r.key)} />
+            <FeedRow key={r.key} row={r} now={now} fresh={fresh.has(r.key)} viewerHandle={viewerHandle} />
           ))}
         </ol>
       )}
@@ -359,10 +373,12 @@ function TotalDigits({ value, animate }: { value: number; animate: boolean }) {
   );
 }
 
-function FeedRow({ row, now, fresh }: { row: Row; now: number; fresh: boolean }) {
+function FeedRow({ row, now, fresh, viewerHandle }: { row: Row; now: number; fresh: boolean; viewerHandle?: string }) {
   // Stream rows mount collapsed and above, then open and slide down on the next frame (instant under reduced motion).
   const entered = useEntered(Boolean(row.live));
   const when = relativeTime(row.createdAt, now);
+  // Your rows follow your current handle, so a rename on the profile relabels them without a remount.
+  const hunter = row.you && viewerHandle ? viewerHandle : row.hunter;
 
   return (
     <li
@@ -382,7 +398,7 @@ function FeedRow({ row, now, fresh }: { row: Row; now: number; fresh: boolean })
             fresh ? 'bg-pk-blue-100 motion-reduce:bg-transparent' : 'bg-transparent',
           ].join(' ')}
         >
-          <span className="min-w-0 truncate text-body-sm font-semibold text-pk-content-primary">@{row.hunter}</span>
+          <span className="min-w-0 truncate text-body-sm font-semibold text-pk-content-primary">@{hunter}</span>
           {row.you && (
             <span className="shrink-0 text-body-sm text-pk-content-tertiary" data-testid="live-row-you">
               (you)
