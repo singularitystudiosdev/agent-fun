@@ -6,7 +6,8 @@ import type { BoardTab } from './boardTabs';
  * "low competition" checkbox, inline above the grid. The header tab picks the list; these refine and re-order it.
  */
 
-export type MinReward = 0 | 5_000 | 10_000 | 20_000;
+/** Whole dollars: one of `MIN_REWARD_OPTIONS`, or any amount typed into the dropdown's custom field. */
+export type MinReward = number;
 export type EndsWithin = 'any' | '24h' | '7d' | '14d';
 export type Competition = 'any' | 'low';
 
@@ -41,6 +42,20 @@ export const MIN_REWARD_OPTIONS: readonly { value: MinReward; label: string }[] 
   { value: 10_000, label: '$10,000+' },
   { value: 20_000, label: '$20,000+' },
 ];
+
+/** The trigger text for any minimum: the preset's label, else "$7,500+". */
+export const minRewardLabel = (n: MinReward): string => MIN_REWARD_OPTIONS.find((o) => o.value === n)?.label ?? `$${n.toLocaleString('en-US')}+`;
+
+/**
+ * Reads the custom minimum typed into the reward dropdown: "7500", "7,500", "$7,500", "7.5k", "1m" (whitespace ignored).
+ * Whole dollars, rounded; null while the text is empty or not an amount yet.
+ */
+export function parseRewardInput(text: string): MinReward | null {
+  const m = text.toLowerCase().replace(/[$,\s]/g, '').match(/^(\d+(?:\.\d*)?|\.\d+)([km])?$/);
+  if (!m) return null;
+  const n = Math.round(Number(m[1]) * (m[2] === 'k' ? 1_000 : m[2] === 'm' ? 1_000_000 : 1));
+  return Number.isSafeInteger(n) ? n : null;
+}
 export const ENDS_WITHIN_OPTIONS: readonly { value: EndsWithin; label: string }[] = [
   { value: 'any', label: 'Any deadline' },
   { value: '24h', label: 'Ends in 24h' },

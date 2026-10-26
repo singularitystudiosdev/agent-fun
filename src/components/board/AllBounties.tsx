@@ -5,14 +5,17 @@ import {
   ENDS_WITHIN_OPTIONS,
   LOW_COMPETITION_BELOW,
   MIN_REWARD_OPTIONS,
+  minRewardLabel,
+  parseRewardInput,
   queryTerms,
   SORT_OPTIONS,
   type BoardSort,
+  type MinReward,
   type PanelFilters,
 } from '../../lib/boardFilters';
 import type { BoardBounty } from '../../lib/bounty';
 import { BountyCard } from '../BountyCard';
-import { SelectMenu } from './SelectMenu';
+import { SelectMenu, type SelectMenuCustom } from './SelectMenu';
 
 /**
  * The home page's bounty grid, directly under the sticky header. polymarket.com's "All markets" grid geometry:
@@ -222,6 +225,16 @@ const SORT_ICONS: Record<BoardSort, ReactNode> = {
   'time-left': <ClockIcon />,
 };
 const SORT_MENU_OPTIONS = SORT_OPTIONS.map((o) => ({ ...o, icon: SORT_ICONS[o.value] }));
+
+/** The reward dropdown's typed minimum: "7500", "7,500", "7.5k" all read as $7,500+. */
+const REWARD_CUSTOM: SelectMenuCustom<MinReward> = {
+  label: 'Custom minimum reward',
+  placeholder: 'Custom amount',
+  prefix: '$',
+  parse: parseRewardInput,
+  format: minRewardLabel,
+  toText: (n) => n.toLocaleString('en-US'),
+};
 
 /**
  * polymarket's "Hide sports" checkbox: a 16px box, gap-2, a 12px medium label. A native input, restyled; checked
@@ -441,6 +454,7 @@ export function AllBounties({
               options={MIN_REWARD_OPTIONS}
               onChange={(minReward) => onFiltersChange({ ...filters, minReward })}
               testId="filter-reward"
+              custom={REWARD_CUSTOM}
             />
             <FilterCheckbox
               label={`Under ${LOW_COMPETITION_BELOW} submissions`}

@@ -22,6 +22,8 @@ const {
   isBoardSort,
   isRefined,
   MIN_REWARD_OPTIONS,
+  minRewardLabel,
+  parseRewardInput,
   recentSubmissions,
   SORT_OPTIONS,
   sortBounties,
@@ -81,6 +83,31 @@ test('query: case-insensitive over title, category, skills and sponsor; terms ar
   assert.deepEqual(run({ query: 'python backend' }), ['d'], 'AND across fields');
   assert.deepEqual(run({ query: '  market   BOT ' }), ['d'], 'extra whitespace');
   assert.deepEqual(run({ query: 'python rust' }), [], 'no bounty has both');
+});
+
+test('parseRewardInput reads typed amounts; minRewardLabel names any minimum', () => {
+  const cases: [string, number | null][] = [
+    ['7500', 7_500],
+    ['7,500', 7_500],
+    [' $7,500 ', 7_500],
+    ['7.5k', 7_500],
+    ['12K', 12_000],
+    ['1m', 1_000_000],
+    ['1.25k', 1_250],
+    ['99.6', 100],
+    ['0', 0],
+    ['', null],
+    ['   ', null],
+    ['abc', null],
+    ['-500', null],
+    ['5k5', null],
+  ];
+  for (const [text, want] of cases) assert.equal(parseRewardInput(text), want, JSON.stringify(text));
+  assert.equal(minRewardLabel(0), 'Any reward');
+  assert.equal(minRewardLabel(10_000), '$10,000+');
+  assert.equal(minRewardLabel(7_500), '$7,500+');
+  assert.deepEqual(run({ minReward: 7_500 }), ['a', 'c', 'd', 'e'], 'a typed minimum filters like a preset');
+  assert.equal(activeFilterCount({ minReward: 7_500, endsWithin: 'any', competition: 'any' }), 1);
 });
 
 test('minReward is inclusive', () => {

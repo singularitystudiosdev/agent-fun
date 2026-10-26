@@ -15,7 +15,22 @@ export interface SelectMenuOption<T extends string | number> {
   icon?: ReactNode;
 }
 
-const FOCUS_RING = 'focus-visible:ring-2 focus-visible:ring-pk-content-secondary focus-visible:ring-offset-1 focus-visible:ring-offset-pk-surface';
+/** A free-entry field under the options, for a value no option offers (e.g. a typed minimum reward). */
+export interface SelectMenuCustom<T extends string | number> {
+  /** Accessible name of the field, e.g. "Custom minimum reward". */
+  label: string;
+  placeholder: string;
+  /** A unit drawn before the text, e.g. "$". */
+  prefix?: string;
+  /** null while the text is not a value yet. */
+  parse: (text: string) => T | null;
+  /** The trigger text for a value no option matches. */
+  format: (value: T) => string;
+  /** The field's starting text for a value no option matches. */
+  toText: (value: T) => string;
+}
+
+const FOCUS_RING ='focus-visible:ring-2 focus-visible:ring-pk-content-secondary focus-visible:ring-offset-1 focus-visible:ring-offset-pk-surface';
 
 /* polymarket's outline trigger, on this project's tokens. Open: data-[open] wash, darker hairline and a 3px gray ring. */
 const TRIGGER = `inline-flex h-10 shrink-0 cursor-pointer select-none items-center gap-0.5 rounded-md border border-pk-gray-200 bg-pk-surface px-2.5 text-body-base font-semibold text-pk-content-primary outline-none transition-[color,background-color,border-color,scale] duration-[120ms] ease-out hover:bg-pk-hover-overlay-darker active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100 data-open:border-pk-gray-300 data-open:bg-pk-gray-100 data-open:ring-3 data-open:ring-pk-gray-100 ${FOCUS_RING}`;
@@ -50,6 +65,7 @@ export function SelectMenu<T extends string | number>({
   options,
   onChange,
   testId,
+  custom,
 }: {
   /** The accessible name prefix, e.g. "Sort by"; the trigger reads "Sort by: Highest reward". */
   label: string;
@@ -57,25 +73,48 @@ export function SelectMenu<T extends string | number>({
   options: readonly SelectMenuOption<T>[];
   onChange: (next: T) => void;
   testId?: string;
+  /** Adds a typed-value field below the options. Typing applies live; Enter closes; clearing it restores the value the menu opened with. */
+  custom?: SelectMenuCustom<T>;
 }) {
   const id = useId();
   const menuId = `${id}-menu`;
   const [open, setOpen] = useState(false);
-  /** Where focus lands when the popup mounts: the picked item, the last item, or the popup itself (a pointer open). */
-  const [initialFocus, setInitialFocus] = useState<'checked' | 'last' | 'menu'>('checked');
+  /** Where focus lands when the popup mounts: the picked item, the last item, the custom field, or the popup itself (a pointer open). */
+  const [initialFocus, setInitialFocus] = useState<'checked' | 'last' | 'custom' | 'menu'>('checked');
   const [shift, setShift] = useState(0);
+  const [customText, setCustomText] = useState('');
+  const openedWith = useRef(value);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const customRef = useRef<HTMLInputElement>(null);
 
-  const selected = options.find((o) => o.value === value) ?? options[0];
+  const preset = options.find((o) => o.value === value);
+  const isCustom = !!custom && !preset;
+  const selected = preset ?? (custom ? { value, label: custom.format(value) } : options[0]);
 
   const items = () => Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"]') ?? []);
 
   const openMenu = (focus: 'checked' | 'last' | 'menu') => {
-    setInitialFocus(focus);
+    openedWith.current = value;
+    setCustomText(isCustom && custom ? custom.toText(value) : '');
+    // A typed value has no row to land on: keyboard opens go to its field instead.
+    setInitialFocus(isCustom && focus === 'checked' ? 'custom' : focus);
     setShift(0);
     setOpen(true);
+  };
+
+  const typeCustom = (text: string) => {
+    if (!custom) return;
+    setCustomText(text);
+    if (text.trim() === '') {
+      const back = options.some((o) => o.value === openedWith.current) ? openedWith.current : options[0].value;
+      if (back !== value) onChange(back);
+      return;
+    }
+    const next = custom.parse(text);
+    if (next !== null && next !== value) onChange(next);
   };
 
   const close = useCallback((returnFocus: boolean) => {
@@ -92,7 +131,7 @@ export function SelectMenu<T extends string | number>({
   useLayoutEffect(() => {
     if (!open) return;
     const place = () => {
-      const menu = menuRef.current;
+      const menu = popupRef.current;
       const root = rootRef.current;
       if (!menu || !root) return;
       const left = root.getBoundingClientRect().left;
@@ -109,6 +148,7 @@ export function SelectMenu<T extends string | number>({
     if (!open) return;
     const list = items();
     if (initialFocus === 'menu') menuRef.current?.focus({ preventScroll: true });
+    else if (initialFocus === 'custom') customRef.current?.focus({ preventScroll: true });
     else if (initialFocus === 'last') list.at(-1)?.focus({ preventScroll: true });
     else (list.find((el) => el.getAttribute('aria-checked') === 'true') ?? list[0])?.focus({ preventScroll: true });
   }, [open, initialFocus]);
@@ -143,14 +183,18 @@ export function SelectMenu<T extends string | number>({
     const list = items();
     const at = list.indexOf(document.activeElement as HTMLElement);
     const focusAt = (i: number) => list[(i + list.length) % list.length]?.focus({ preventScroll: true });
+    const field = customRef.current;
     switch (event.key) {
       case 'ArrowDown':
         event.preventDefault();
-        focusAt(at + 1);
+        // With a custom field, the arrows run through it between the last row and the first.
+        if (field && at === list.length - 1) field.focus();
+        else focusAt(at + 1);
         break;
       case 'ArrowUp':
         event.preventDefault();
-        focusAt(at < 0 ? -1 : at - 1);
+        if (field && at === 0) field.focus();
+        else focusAt(at < 0 ? -1 : at - 1);
         break;
       case 'Home':
         event.preventDefault();
@@ -172,7 +216,43 @@ export function SelectMenu<T extends string | number>({
         close(true);
         break;
       case 'Tab':
-        // Tab leaves from the trigger, so focus moves on to the next control in the bar.
+        // Forward Tab reaches the custom field first; otherwise Tab leaves from the trigger, so focus moves on to the next control.
+        if (field && !event.shiftKey) {
+          event.preventDefault();
+          field.focus();
+          break;
+        }
+        triggerRef.current?.focus();
+        setOpen(false);
+        break;
+    }
+  };
+
+  const onCustomKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    const list = items();
+    switch (event.key) {
+      case 'Enter':
+        event.preventDefault();
+        close(true);
+        break;
+      case 'Escape':
+        event.preventDefault();
+        close(true);
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        list.at(-1)?.focus({ preventScroll: true });
+        break;
+      case 'ArrowDown':
+        event.preventDefault();
+        list[0]?.focus({ preventScroll: true });
+        break;
+      case 'Tab':
+        if (event.shiftKey) {
+          event.preventDefault();
+          list.at(-1)?.focus({ preventScroll: true });
+          break;
+        }
         triggerRef.current?.focus();
         setOpen(false);
         break;
@@ -210,6 +290,11 @@ export function SelectMenu<T extends string | number>({
 
       {open && (
         <div
+          ref={popupRef}
+          style={shift ? { left: shift } : undefined}
+          className="absolute top-full left-0 z-30 mt-2 flex w-max min-w-[max(100%,12.5rem)] max-w-[calc(100vw-2rem)] origin-top-left flex-col rounded-xl bg-pk-surface p-2 shadow-pk-middle transition-[opacity,scale] duration-150 ease-out starting:scale-95 starting:opacity-0 motion-reduce:transition-none"
+        >
+        <div
           ref={menuRef}
           id={menuId}
           role="menu"
@@ -217,8 +302,7 @@ export function SelectMenu<T extends string | number>({
           aria-label={label}
           data-testid={testId ? `${testId}-menu` : undefined}
           onKeyDown={onMenuKeyDown}
-          style={shift ? { left: shift } : undefined}
-          className="absolute top-full left-0 z-30 mt-2 flex w-max min-w-[max(100%,12.5rem)] max-w-[calc(100vw-2rem)] origin-top-left flex-col rounded-xl bg-pk-surface p-2 shadow-pk-middle outline-none focus-visible:ring-2 focus-visible:ring-pk-content-secondary transition-[opacity,scale] duration-150 ease-out starting:scale-95 starting:opacity-0 motion-reduce:transition-none"
+          className="flex flex-col rounded-md outline-none focus-visible:ring-2 focus-visible:ring-pk-content-secondary"
         >
           {options.map((o) => {
             const checked = o.value === value;
@@ -247,6 +331,37 @@ export function SelectMenu<T extends string | number>({
               </div>
             );
           })}
+        </div>
+        {custom && (
+          // Outside the role="menu" list (a menu holds only menu items), under a hairline: the same search-field anatomy as the board's search.
+          <div className="mt-1 border-t border-pk-border pt-2">
+            <label className="flex h-10 cursor-text items-center gap-1 rounded-md border border-transparent bg-pk-gray-100 px-3 transition-colors duration-150 motion-reduce:transition-none focus-within:border-pk-gray-300 focus-within:bg-pk-surface focus-within:ring-2 focus-within:ring-pk-content-secondary/40">
+              {custom.prefix && (
+                <span aria-hidden="true" className="text-body-base font-semibold text-pk-content-secondary">
+                  {custom.prefix}
+                </span>
+              )}
+              <input
+                ref={customRef}
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                spellCheck={false}
+                aria-label={custom.label}
+                aria-invalid={customText.trim() !== '' && custom.parse(customText) === null}
+                placeholder={custom.placeholder}
+                value={customText}
+                data-testid={testId ? `${testId}-custom` : undefined}
+                onChange={(event) => typeCustom(event.target.value)}
+                onKeyDown={onCustomKeyDown}
+                className="min-w-0 flex-1 bg-transparent text-body-base font-semibold text-pk-content-primary outline-none focus-visible:outline-none placeholder:font-medium placeholder:text-pk-content-tertiary max-md:text-[16px]"
+              />
+              <span aria-hidden="true" className="flex size-5 shrink-0 items-center [&_svg]:size-5">
+                {isCustom && <CheckIcon />}
+              </span>
+            </label>
+          </div>
+        )}
         </div>
       )}
     </div>
