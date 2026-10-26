@@ -110,12 +110,13 @@ function useEntered(animate: boolean): boolean {
 }
 
 // ---------- components ----------
-export function LiveSubmissions({ bounty }: { bounty: BoardBounty }) {
+/** `onTotal` reports the running total (the data's count plus live arrivals) so the page's facts can show the same number. */
+export function LiveSubmissions({ bounty, onTotal }: { bounty: BoardBounty; onTotal?: (total: number) => void }) {
   // Remount (fresh state, every timer cleared) when the bounty changes or its data hot-reloads.
-  return <LiveSubmissionsPanel key={`${bounty.slug}:${bounty.submissions?.length ?? 0}`} bounty={bounty} />;
+  return <LiveSubmissionsPanel key={`${bounty.slug}:${bounty.submissions?.length ?? 0}`} bounty={bounty} onTotal={onTotal} />;
 }
 
-function LiveSubmissionsPanel({ bounty }: { bounty: BoardBounty }) {
+function LiveSubmissionsPanel({ bounty, onTotal }: { bounty: BoardBounty; onTotal?: (total: number) => void }) {
   const slug = bounty.slug || bounty.id;
   const deadlineMs = Date.parse(bounty.deadline);
   const [now, setNow] = useState(() => Date.now());
@@ -220,6 +221,7 @@ function LiveSubmissionsPanel({ bounty }: { bounty: BoardBounty }) {
   }, []);
 
   const total = Math.max(bounty.submissionCount ?? 0, bounty.submissions?.length ?? 0) + added;
+  useEffect(() => onTotal?.(total), [onTotal, total]);
 
   return (
     <section

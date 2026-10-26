@@ -72,7 +72,7 @@ function CopyLinkButton({ bounty }: { bounty: BoardBounty }) {
 }
 
 /** Label / value rows: the reward, the live countdown, every placement, skills, submissions and when it opened. */
-function Facts({ bounty }: { bounty: BoardBounty }) {
+function Facts({ bounty, liveTotal }: { bounty: BoardBounty; liveTotal?: number }) {
   const labelId = useId();
   const remaining = useCountdown(bounty.deadline);
   const expired = isExpired(remaining);
@@ -81,7 +81,8 @@ function Facts({ bounty }: { bounty: BoardBounty }) {
     .filter(([k, usd]) => Number.isFinite(k) && usd > 0)
     .sort((a, b) => a[0] - b[0]);
   const opened = safeDate(bounty.publishedAt);
-  const count = bounty.submissionCount ?? bounty.submissions?.length ?? 0;
+  // The live panel's running total when it has reported one, so both counts move together.
+  const count = liveTotal ?? bounty.submissionCount ?? bounty.submissions?.length ?? 0;
   const skills = bounty.skills ?? [];
 
   return (
@@ -176,6 +177,8 @@ export function BountyPage({ bounty }: { bounty: BoardBounty }) {
   const headerH = useHeaderHeight();
   const top = headerH + 16;
   const aboutId = useId();
+  // The live panel's running total, mirrored into the facts' Submissions row (undefined until it first reports).
+  const [liveTotal, setLiveTotal] = useState<number>();
 
   return (
     <article data-testid="bounty-page" aria-labelledby={`${aboutId}-title`} className="mx-auto w-full max-w-[1350px] px-4 pt-6 pb-16 lg:px-6">
@@ -209,7 +212,7 @@ export function BountyPage({ bounty }: { bounty: BoardBounty }) {
             </div>
           </header>
 
-          <Facts bounty={bounty} />
+          <Facts bounty={bounty} liveTotal={liveTotal} />
 
           <section aria-labelledby={aboutId} className="flex flex-col gap-3" data-testid="bounty-about">
             <h2 id={aboutId} className="text-heading-xl text-pk-content-primary">
@@ -228,7 +231,7 @@ export function BountyPage({ bounty }: { bounty: BoardBounty }) {
           style={{ ['--side-top' as string]: `${top}px` }}
           className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-(--side-top) lg:max-h-[calc(100dvh-var(--side-top)-16px)] lg:w-[400px] lg:shrink-0 lg:overflow-y-auto lg:overscroll-contain lg:[scrollbar-width:thin] lg:[scrollbar-color:var(--color-pk-gray-300)_transparent]"
         >
-          <LiveSubmissions bounty={bounty} />
+          <LiveSubmissions bounty={bounty} onTotal={setLiveTotal} />
         </aside>
       </div>
 
