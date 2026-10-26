@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { memo, useRef, useState, type ReactNode } from 'react';
 import {
   activeFilterCount,
   DEFAULT_PANEL_FILTERS,
@@ -34,8 +34,25 @@ const OUTLINE_BUTTON = `inline-flex items-center h-10 px-4 rounded-md border bor
 
 const SEARCH_ID = 'all-bounties-search';
 const FILTER_BAR_ID = 'all-bounties-filters';
-/** The bar's expand: polymarket's 200ms (react-animate-height plus a 200ms opacity fade on the home filter row). */
-const BAR_EXPAND_MS = 200;
+
+/** Cards re-render only when their bounty does: opening the filter bar, a menu or the search leaves them alone. */
+const Card = memo(BountyCard);
+
+/**
+ * The card grid, memoised on `bounties` (App's memoised list), so toolbar state never re-renders 30 cards.
+ * Each cell keeps polymarket's fixed 180px height.
+ */
+const BountyGrid = memo(function BountyGrid({ bounties }: { bounties: BoardBounty[] }) {
+  return (
+    <ul role="list" aria-label="Bounties" className="grid h-auto gap-3 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {bounties.map((b) => (
+        <li key={b.id} className="relative h-[180px]" data-reward={b.rewardAmount} data-category={b.category}>
+          <Card bounty={b} />
+        </li>
+      ))}
+    </ul>
+  );
+});
 
 function MagnifierIcon() {
   return (
@@ -295,26 +312,13 @@ export function AllBounties({
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  /** True once the bar has finished expanding: only then may its menus hang outside it. */
-  const [barSettled, setBarSettled] = useState(false);
   const searchButtonRef = useRef<HTMLButtonElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const filterCount = activeFilterCount(filters);
   const refined = queryTerms(query).length > 0 || filterCount > 0 || savedOnly;
 
-  // The collapse clips its content while it animates; once open it lets the menus overflow (instantly under reduced motion).
-  useEffect(() => {
-    if (!filtersOpen) return;
-    const instant = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const timer = window.setTimeout(() => setBarSettled(true), instant ? 0 : BAR_EXPAND_MS);
-    return () => window.clearTimeout(timer);
-  }, [filtersOpen]);
-
-  const toggleFilters = () => {
-    setBarSettled(false);
-    setFiltersOpen((open) => !open);
-  };
+  const toggleFilters = () => setFiltersOpen((open) => !open);
 
   const closeSearch = () => {
     setSearchOpen(false);
@@ -424,21 +428,23 @@ export function AllBounties({
       </div>
 
       {/*
-        polymarket's filter row: a collapsible region (height 0 to auto, 200ms fade) under the icon row, left-aligned.
-        Closed, it is inert (out of the tab order and the a11y tree). z-30 lifts its menus over the cards' z-20 link overlays.
+        polymarket's filter row under the icon row, left-aligned. It does not animate its height: that re-lays out and
+        repaints the whole card grid every frame. The grid moves once, and the row itself fades and drops in on
+        opacity and translate only (compositor work). Closed, it is hidden and inert. z-30 lifts its menus over the cards' z-20 link overlays.
       */}
       <div
         id={FILTER_BAR_ID}
         data-testid="filter-bar"
         data-state={filtersOpen ? 'open' : 'closed'}
         inert={!filtersOpen}
-        className={`relative z-30 -mt-1 grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none ${filtersOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+        hidden={!filtersOpen}
+        className="relative z-30 -mt-1"
       >
-        <div className={`min-h-0 ${filtersOpen && barSettled ? 'overflow-visible' : 'overflow-hidden'}`}>
+        <div>
           <div
             role="group"
             aria-label="Sort and filter bounties"
-            className={`flex flex-wrap items-center gap-2 pt-2.5 pb-2 lg:pt-2 transition-opacity duration-200 ease-out motion-reduce:transition-none ${filtersOpen ? 'opacity-100' : 'opacity-0'}`}
+            className="flex flex-wrap items-center gap-2 pt-2.5 pb-2 lg:pt-2 transition-[opacity,translate] duration-150 ease-out starting:-translate-y-1 starting:opacity-0 motion-reduce:transition-none"
           >
             <SelectMenu label="Sort by" value={sort} options={SORT_MENU_OPTIONS} onChange={onSortChange} testId="filter-sort" />
             <SelectMenu
@@ -480,13 +486,7 @@ export function AllBounties({
       </div>
 
       {n > 0 ? (
-        <ul role="list" aria-label="Bounties" className="grid h-auto gap-3 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {bounties.map((b) => (
-            <li key={b.id} className="relative h-[180px]" data-reward={b.rewardAmount} data-category={b.category}>
-              <BountyCard bounty={b} />
-            </li>
-          ))}
-        </ul>
+        <BountyGrid bounties={bounties} />
       ) : total > 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-xl border border-pk-border py-12 px-4 text-center">
           <p className="text-body-base text-pk-content-secondary">No bounties match these filters.</p>
