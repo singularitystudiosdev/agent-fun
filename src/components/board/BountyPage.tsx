@@ -1,5 +1,5 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { formatBountyAmount, formatEndedOn, type BoardBounty } from '../../lib/bounty';
+import { useEffect, useId, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { formatBountyAmount, formatEndedOn, type BoardBounty, type Submission } from '../../lib/bounty';
 import { formatCountdown, isExpired, isUrgent, useCountdown } from '../../lib/countdown';
 import { RollingTime } from '../BountyCard';
 import { BountyIcon } from '../BountyIcon';
@@ -9,6 +9,7 @@ import { BountyDescription } from './BountyDescription';
 import { LiveSubmissions } from './LiveSubmissions';
 import { appHref } from '../../lib/paths';
 import { ResolutionPanel } from './ResolutionPanel';
+import { SubmissionForm } from './SubmissionForm';
 
 const FOCUS_RING = 'outline-none focus-visible:ring-2 focus-visible:ring-pk-gray-400 focus-visible:ring-offset-2';
 const ICON_BUTTON = `inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-pk-content-primary transition-colors hover:bg-pk-hover-overlay-darker motion-reduce:transition-none ${FOCUS_RING}`;
@@ -44,6 +45,29 @@ const ordinal = (n: number): string => {
   const v = n % 100;
   return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
 };
+
+/** Brand pill in the header: jumps to the submission form (smooth unless reduced motion) and puts focus in it. */
+function SubmitEntryLink() {
+  const onClick = (e: MouseEvent<HTMLAnchorElement>) => {
+    const form = document.getElementById('submit');
+    if (!form) return;
+    e.preventDefault();
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    form.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+    form.querySelector<HTMLElement>('input:not([disabled]), textarea:not([disabled]), button:not([disabled])')?.focus({ preventScroll: true });
+    history.replaceState(history.state, '', '#submit');
+  };
+  return (
+    <a
+      href="#submit"
+      onClick={onClick}
+      data-testid="bounty-submit-cta"
+      className={`mr-1 hidden h-8 items-center rounded-full bg-pk-brand-500 px-3.5 text-body-sm font-semibold whitespace-nowrap text-pk-elevated transition-opacity hover:opacity-90 motion-reduce:transition-none sm:inline-flex ${FOCUS_RING}`}
+    >
+      Submit an entry
+    </a>
+  );
+}
 
 const safeDate = (iso: string | undefined): string | null => (iso && !Number.isNaN(Date.parse(iso)) ? formatEndedOn(iso) : null);
 
@@ -179,6 +203,9 @@ export function BountyPage({ bounty }: { bounty: BoardBounty }) {
   const aboutId = useId();
   // The live panel's running total, mirrored into the facts' Submissions row (undefined until it first reports).
   const [liveTotal, setLiveTotal] = useState<number>();
+  // The viewer's own entries from the form, oldest first; the live panel lands each new one at its top.
+  const [mine, setMine] = useState<Submission[]>([]);
+  useEffect(() => setMine([]), [bounty.slug]);
 
   return (
     <article data-testid="bounty-page" aria-labelledby={`${aboutId}-title`} className="mx-auto w-full max-w-[1350px] px-4 pt-6 pb-16 lg:px-6">
@@ -207,12 +234,15 @@ export function BountyPage({ bounty }: { bounty: BoardBounty }) {
               </h1>
             </div>
             <div className="flex shrink-0 items-center gap-1 pt-0.5">
+              <SubmitEntryLink />
               <CopyLinkButton bounty={bounty} />
               <BookmarkButton eventId={`bounty:${bounty.id}`} />
             </div>
           </header>
 
           <Facts bounty={bounty} liveTotal={liveTotal} />
+
+          <SubmissionForm bounty={bounty} scrollMargin={top} onSubmitted={(s) => setMine((m) => [...m, s])} />
 
           <section aria-labelledby={aboutId} className="flex flex-col gap-3" data-testid="bounty-about">
             <h2 id={aboutId} className="text-heading-xl text-pk-content-primary">
@@ -231,7 +261,7 @@ export function BountyPage({ bounty }: { bounty: BoardBounty }) {
           style={{ ['--side-top' as string]: `${top}px` }}
           className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-(--side-top) lg:max-h-[calc(100dvh-var(--side-top)-16px)] lg:w-[400px] lg:shrink-0 lg:overflow-y-auto lg:overscroll-contain lg:[scrollbar-width:thin] lg:[scrollbar-color:var(--color-pk-gray-300)_transparent]"
         >
-          <LiveSubmissions bounty={bounty} onTotal={setLiveTotal} />
+          <LiveSubmissions bounty={bounty} onTotal={setLiveTotal} injected={mine} />
         </aside>
       </div>
 

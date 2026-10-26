@@ -2,11 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { BoardBounty, Submission } from '../../lib/bounty';
 
 /**
- * LIVE SUBMISSIONS: a bounty page's right column. A header (live dot, title, running total) over one list of who
- * submitted, newest first. While the bounty is open and the tab is visible, a client-side stream (deterministic from
- * slug + tick) lands the first arrival 1.5 to 3 s after the page opens, then one every 2.5 to 6 s. Each arrival opens
- * its row (grid-rows 0fr -> 1fr, so the rows below glide down), slides down and fades in over 300 ms, and holds a
- * pk-blue-100 highlight that fades out by about 2 s. Under reduced motion rows just appear.
+ * LIVE SUBMISSIONS: a bounty page's right column. A header (title, running total) over one list of who submitted,
+ * newest first: "@handle" on the left, the relative time on the right. While the bounty is open and the tab is
+ * visible, a client-side stream (deterministic from slug + tick) lands the first arrival 1.5 to 3 s after the page
+ * opens, then one every 2.5 to 6 s. The viewer's own entries (`injected`, from the submission form) land at the top the
+ * same way, marked with a muted "(you)". Each arrival opens its row (grid-rows 0fr -> 1fr, so the rows below glide
+ * down), slides down and fades in over 300 ms, and holds a pk-blue-100 highlight that fades out by about 2 s. Under
+ * reduced motion rows just appear.
  */
 
 const FOCUS_RING = 'outline-none focus-visible:ring-2 focus-visible:ring-pk-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-pk-surface';
@@ -52,6 +54,8 @@ interface Row {
   createdAt: string;
   /** Appended by the client stream: gets the entrance and the highlight. */
   live?: boolean;
+  /** The viewer's own entry (from `injected`): gets a muted "(you)". */
+  you?: boolean;
 }
 
 /** One arrival for stream tick `n`: about half agents; an existing hunter about 45% of the time, else a new name. */
@@ -59,7 +63,9 @@ function makeArrival(slug: string, n: number, existing: readonly Row[], at: numb
   const rand = mulberry32(fnv1a(`${slug}#arrival#${n}`));
   const agent = rand() < 0.5;
   const prev = existing[0]?.hunter;
-  const known = [...new Set(existing.filter((r) => r.agent === agent && r.hunter !== prev).map((r) => r.hunter))];
+  // Never echo the viewer's own handle back as a stranger's arrival.
+  const mine = new Set(existing.filter((r) => r.you).map((r) => r.hunter));
+  const known = [...new Set(existing.filter((r) => r.agent === agent && r.hunter !== prev && !mine.has(r.hunter)).map((r) => r.hunter))];
   let hunter = known.length > 0 && rand() < 0.45 ? pick(known, rand) : pick(agent ? NEW_AGENTS : NEW_HUMANS, rand);
   if (hunter === prev) {
     const pool = agent ? NEW_AGENTS : NEW_HUMANS;
@@ -74,6 +80,32 @@ const toRows = (subs: readonly Submission[], slug: string): Row[] =>
     .sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0) || b.i - a.i)
     .slice(0, MAX_ROWS)
     .map(({ i: _i, ...r }) => r);
+
+/**
+ * The viewer's entries in `injected` (newest last) that the panel has not shown yet, as rows newest first, plus the new
+ * seen count. Items at index >= `seen` are new; a shorter list (reset) yields nothing and re-baselines the count.
+ */
+export function takeInjected(
+  injected: readonly Submission[] | undefined,
+  seen: number,
+  slug: string,
+  live: boolean,
+): { rows: Row[]; seen: number } {
+  const list = injected ?? [];
+  if (list.length <= seen) return { rows: [], seen: list.length };
+  const rows = list
+    .slice(seen)
+    .map((s, j) => ({
+      key: `${slug}-you-${s.id ?? seen + j}`,
+      hunter: s.hunter,
+      agent: Boolean(s.agent),
+      createdAt: s.createdAt,
+      you: true,
+      ...(live ? { live: true } : {}),
+    }))
+    .reverse();
+  return { rows, seen: list.length };
+}
 
 // ---------- formatting ----------
 const DATE_FMT = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
@@ -90,7 +122,6 @@ function relativeTime(iso: string, now: number): string {
   if (d < 30) return `${d}d ago`;
   return DATE_FMT.format(t);
 }
-const initial = (handle: string): string => (handle.match(/[a-z0-9]/i)?.[0] ?? '?').toUpperCase();
 
 /** False on mount, true two frames later: the start and end states of an entrance transition. */
 function useEntered(animate: boolean): boolean {
@@ -110,17 +141,27 @@ function useEntered(animate: boolean): boolean {
 }
 
 // ---------- components ----------
-/** `onTotal` reports the running total (the data's count plus live arrivals) so the page's facts can show the same number. */
-export function LiveSubmissions({ bounty, onTotal }: { bounty: BoardBounty; onTotal?: (total: number) => void }) {
-  // Remount (fresh state, every timer cleared) when the bounty changes or its data hot-reloads.
-  return <LiveSubmissionsPanel key={`${bounty.slug}:${bounty.submissions?.length ?? 0}`} bounty={bounty} onTotal={onTotal} />;
+interface LiveSubmissionsProps {
+  bounty: BoardBounty;
+  /** Reports the running total (the data's count plus live arrivals plus the viewer's own) so the page can show it too. */
+  onTotal?: (n: number) => void;
+  /** The viewer's own submissions from the submission form, newest last. Each new item lands at the top. */
+  injected?: Submission[];
 }
 
-function LiveSubmissionsPanel({ bounty, onTotal }: { bounty: BoardBounty; onTotal?: (total: number) => void }) {
+export function LiveSubmissions({ bounty, onTotal, injected }: LiveSubmissionsProps) {
+  // Remount (fresh state, every timer cleared) when the bounty changes or its data hot-reloads. `injected` is watched
+  // inside, never part of the key.
+  return <LiveSubmissionsPanel key={`${bounty.slug}:${bounty.submissions?.length ?? 0}`} bounty={bounty} onTotal={onTotal} injected={injected} />;
+}
+
+function LiveSubmissionsPanel({ bounty, onTotal, injected }: LiveSubmissionsProps) {
   const slug = bounty.slug || bounty.id;
   const deadlineMs = Date.parse(bounty.deadline);
   const [now, setNow] = useState(() => Date.now());
-  const [rows, setRows] = useState<Row[]>(() => toRows(bounty.submissions ?? [], slug));
+  // Entries already in `injected` at mount (a remount after a data hot-reload) show at once, without the entrance.
+  const [initialMine] = useState(() => takeInjected(injected, 0, slug, false));
+  const [rows, setRows] = useState<Row[]>(() => [...initialMine.rows, ...toRows(bounty.submissions ?? [], slug)].slice(0, MAX_ROWS));
   const [added, setAdded] = useState(0);
   const [announcement, setAnnouncement] = useState('');
   const [fresh, setFresh] = useState<ReadonlySet<string>>(() => new Set());
@@ -152,6 +193,36 @@ function LiveSubmissionsPanel({ bounty, onTotal }: { bounty: BoardBounty; onTota
     setAnnouncement(text);
   }, []);
 
+  /** One arrival: on top, counted, highlighted for about 2 s, announced. */
+  const land = useCallback(
+    (row: Row, at: number, text: string) => {
+      rowsRef.current = [row, ...rowsRef.current].slice(0, MAX_ROWS);
+      setRows(rowsRef.current);
+      setAdded((a) => a + 1);
+      setNow(at);
+      setFresh((prev) => new Set(prev).add(row.key));
+      later(() => {
+        setFresh((prev) => {
+          const s = new Set(prev);
+          s.delete(row.key);
+          return s;
+        });
+      }, HIGHLIGHT_MS);
+      announce(text);
+    },
+    [later, announce],
+  );
+
+  // The viewer's own entries: each new item in `injected` lands at the top like any arrival.
+  const seenMine = useRef(initialMine.seen);
+  useEffect(() => {
+    const { rows: mine, seen } = takeInjected(injected, seenMine.current, slug, true);
+    seenMine.current = seen;
+    const at = Date.now();
+    // Oldest first, so the newest ends on top.
+    for (let k = mine.length - 1; k >= 0; k--) land(mine[k], at, 'Your submission was added');
+  }, [injected, slug, land]);
+
   const open = Number.isNaN(deadlineMs) || now < deadlineMs;
 
   // Relative times refresh every 15 s; flip to closed exactly at the deadline.
@@ -182,19 +253,7 @@ function LiveSubmissionsPanel({ bounty, onTotal }: { bounty: BoardBounty; onTota
         return;
       }
       const row = makeArrival(slug, tick.current++, rowsRef.current, at);
-      rowsRef.current = [row, ...rowsRef.current].slice(0, MAX_ROWS);
-      setRows(rowsRef.current);
-      setAdded((a) => a + 1);
-      setNow(at);
-      setFresh((prev) => new Set(prev).add(row.key));
-      later(() => {
-        setFresh((prev) => {
-          const s = new Set(prev);
-          s.delete(row.key);
-          return s;
-        });
-      }, HIGHLIGHT_MS);
-      announce(`@${row.hunter} submitted`);
+      land(row, at, `@${row.hunter} submitted`);
       schedule();
     };
     const onVisibility = () => {
@@ -209,7 +268,7 @@ function LiveSubmissionsPanel({ bounty, onTotal }: { bounty: BoardBounty; onTota
       document.removeEventListener('visibilitychange', onVisibility);
       if (next !== undefined) drop(next);
     };
-  }, [open, slug, deadlineMs, later, drop, announce]);
+  }, [open, slug, deadlineMs, later, drop, land]);
 
   // Every timer dies with the panel.
   useEffect(() => {
@@ -220,8 +279,11 @@ function LiveSubmissionsPanel({ bounty, onTotal }: { bounty: BoardBounty; onTota
     };
   }, []);
 
-  const total = Math.max(bounty.submissionCount ?? 0, bounty.submissions?.length ?? 0) + added;
-  useEffect(() => onTotal?.(total), [onTotal, total]);
+  const total = Math.max(bounty.submissionCount ?? 0, bounty.submissions?.length ?? 0) + initialMine.seen + added;
+  // Braced: whatever the callback returns must never be taken for an effect cleanup.
+  useEffect(() => {
+    onTotal?.(total);
+  }, [onTotal, total]);
 
   return (
     <section
@@ -230,15 +292,9 @@ function LiveSubmissionsPanel({ bounty, onTotal }: { bounty: BoardBounty; onTota
       className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-pk-border bg-pk-elevated"
     >
       <header className="flex items-center justify-between gap-3 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <span aria-hidden="true" className="relative flex size-2">
-            {open && <span className="absolute inset-0 rounded-full bg-pk-red-500 opacity-60 motion-safe:animate-ping motion-reduce:hidden" />}
-            <span className={`relative size-2 rounded-full ${open ? 'bg-pk-red-500 motion-safe:animate-pulse' : 'bg-pk-gray-400'}`} />
-          </span>
-          <h2 id="live-submissions-title" className="text-body-base font-semibold text-pk-content-primary">
-            {open ? 'Live submissions' : 'Submissions'}
-          </h2>
-        </div>
+        <h2 id="live-submissions-title" className="text-body-base font-semibold text-pk-content-primary">
+          {open ? 'Live submissions' : 'Submissions'}
+        </h2>
         <p className="text-body-sm text-pk-content-secondary">
           <TotalCount value={total} animate={added > 0} /> total
         </p>
@@ -303,10 +359,6 @@ function TotalDigits({ value, animate }: { value: number; animate: boolean }) {
   );
 }
 
-function AgentBadge() {
-  return <span className="shrink-0 rounded-full border border-pk-border px-1.5 text-body-xs font-medium text-pk-content-secondary">Agent</span>;
-}
-
 function FeedRow({ row, now, fresh }: { row: Row; now: number; fresh: boolean }) {
   // Stream rows mount collapsed and above, then open and slide down on the next frame (instant under reduced motion).
   const entered = useEntered(Boolean(row.live));
@@ -324,20 +376,18 @@ function FeedRow({ row, now, fresh }: { row: Row; now: number; fresh: boolean })
       <div className="min-h-0 overflow-hidden">
         <div
           className={[
-            'flex items-center gap-2.5 border-b border-pk-border px-4 py-2 group-last:border-b-0',
+            'flex min-h-11 items-center gap-1.5 border-b border-pk-border px-4 py-2 group-last:border-b-0',
             'transition-[opacity,transform,background-color] duration-300 ease-out motion-reduce:transition-none',
             entered ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0 motion-reduce:translate-y-0 motion-reduce:opacity-100',
             fresh ? 'bg-pk-blue-100 motion-reduce:bg-transparent' : 'bg-transparent',
           ].join(' ')}
         >
-          <span
-            aria-hidden="true"
-            className="grid size-7 shrink-0 place-items-center rounded-full bg-pk-gray-100 text-body-xs font-semibold text-pk-content-secondary"
-          >
-            {initial(row.hunter)}
-          </span>
           <span className="min-w-0 truncate text-body-sm font-semibold text-pk-content-primary">@{row.hunter}</span>
-          {row.agent && <AgentBadge />}
+          {row.you && (
+            <span className="shrink-0 text-body-sm text-pk-content-tertiary" data-testid="live-row-you">
+              (you)
+            </span>
+          )}
           {when && (
             <time dateTime={row.createdAt} className="ml-auto shrink-0 pl-2 text-body-xs text-pk-content-tertiary tabular-nums">
               {when}

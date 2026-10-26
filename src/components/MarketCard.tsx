@@ -88,6 +88,8 @@ export function BookmarkButton({ eventId }: { eventId: string }) {
     e.preventDefault();
     const next = !saved;
     localStorage.setItem(storageKey, next ? '1' : '0');
+    // Same-tab listeners (the board's Saved filter); the 'storage' event only reaches other tabs.
+    window.dispatchEvent(new CustomEvent('bounty-saved-change', { detail: { eventId, saved: next } }));
     setFrame(next ? 'unrolled' : 'rolled');
   };
 

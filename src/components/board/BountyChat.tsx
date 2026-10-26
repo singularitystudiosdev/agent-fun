@@ -41,7 +41,6 @@ const prefersReducedMotion = (): boolean =>
 
 const ROLE_BADGE: Partial<Record<ChatMessage['role'], { label: string; className: string }>> = {
   sponsor: { label: 'Sponsor', className: 'bg-pk-blue-100 text-pk-brand-500' },
-  agent: { label: 'Agent', className: 'bg-pk-gray-100 text-pk-content-secondary' },
 };
 
 function Message({ message, now }: { message: ChatMessage; now: number }) {

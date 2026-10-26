@@ -75,8 +75,17 @@ const BrandMark = () => (
 
 /* ---- Pieces ---- */
 
-/** Clone SEARCH_LABEL: 40px, gray-100 fill, magnifier, "/" key chip that hides while focused. Typing is visual only. */
-function SearchField({ inputRef, id }: { inputRef: React.RefObject<HTMLInputElement | null>; id: string }) {
+const ClearIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" aria-hidden="true" className="size-4">
+    <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+  </svg>
+);
+
+/**
+ * Clone SEARCH_LABEL: 40px, gray-100 fill, magnifier, "/" key chip that hides while focused.
+ * Controlled by the board's search (App's `query`): typing filters the grid live; a clear button replaces the chip once there is text.
+ */
+function SearchField({ inputRef, id, value, onChange }: { inputRef: React.RefObject<HTMLInputElement | null>; id: string; value: string; onChange: (next: string) => void }) {
   return (
     <form role="search" className="w-full" onSubmit={(event) => event.preventDefault()}>
       <label
@@ -94,12 +103,28 @@ function SearchField({ inputRef, id }: { inputRef: React.RefObject<HTMLInputElem
           aria-label="Search bounties"
           aria-keyshortcuts="/"
           placeholder="Search bounties..."
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
           // The focus indicator is the label's focus-within ring-2 (the whole field), so the input's own outline is dropped.
           className="min-w-0 flex-1 bg-transparent px-1 text-body-base font-medium text-pk-content-primary outline-none focus-visible:outline-none placeholder:text-pk-content-primary/40 [&::-webkit-search-cancel-button]:appearance-none"
         />
-        <span aria-hidden="true" className="flex shrink-0 items-center rounded-md bg-pk-content-primary/5 px-1.5 py-0.5 group-focus-within/search:hidden">
-          <span className="font-mono text-[13px] leading-4 font-semibold tracking-[-0.09px] text-pk-gray-500">/</span>
-        </span>
+        {value ? (
+          <button
+            type="button"
+            aria-label="Clear search"
+            onClick={() => {
+              onChange('');
+              inputRef.current?.focus();
+            }}
+            className="-mr-1 inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-pk-content-secondary outline-none transition-colors duration-150 motion-reduce:transition-none hover:bg-pk-hover-overlay-darker hover:text-pk-content-primary focus-visible:ring-2 focus-visible:ring-pk-content-secondary"
+          >
+            <ClearIcon />
+          </button>
+        ) : (
+          <span aria-hidden="true" className="flex shrink-0 items-center rounded-md bg-pk-content-primary/5 px-1.5 py-0.5 group-focus-within/search:hidden">
+            <span className="font-mono text-[13px] leading-4 font-semibold tracking-[-0.09px] text-pk-gray-500">/</span>
+          </span>
+        )}
       </label>
     </form>
   );
@@ -125,7 +150,20 @@ function Tab({ id, active, icon, label, count, onSelect }: { id: BoardTab; activ
 
 /* ---- Header ---- */
 
-export function SiteHeader({ bounties, tab, onTabChange }: { bounties: BoardBounty[]; tab: BoardTab | null; onTabChange: (t: BoardTab) => void }) {
+export function SiteHeader({
+  bounties,
+  tab,
+  onTabChange,
+  query,
+  onQueryChange,
+}: {
+  bounties: BoardBounty[];
+  tab: BoardTab | null;
+  onTabChange: (t: BoardTab) => void;
+  /** The board search, owned by App; typing here filters the grid live. */
+  query: string;
+  onQueryChange: (next: string) => void;
+}) {
   const desktopInputRef = useRef<HTMLInputElement>(null);
   const mobileInputRef = useRef<HTMLInputElement>(null);
   const railRef = useRef<HTMLDivElement>(null);
@@ -207,7 +245,7 @@ export function SiteHeader({ bounties, tab, onTabChange }: { bounties: BoardBoun
 
         <div className="hidden w-full min-w-0 lg:flex">
           <div className="w-full max-w-[600px]">
-            <SearchField inputRef={desktopInputRef} id="board-search" />
+            <SearchField inputRef={desktopInputRef} id="board-search" value={query} onChange={onQueryChange} />
           </div>
         </div>
 
@@ -233,7 +271,7 @@ export function SiteHeader({ bounties, tab, onTabChange }: { bounties: BoardBoun
 
       {mobileSearchOpen && (
         <div id="board-search-mobile-row" className="px-4 pb-3 lg:hidden">
-          <SearchField inputRef={mobileInputRef} id="board-search-mobile" />
+          <SearchField inputRef={mobileInputRef} id="board-search-mobile" value={query} onChange={onQueryChange} />
         </div>
       )}
 
