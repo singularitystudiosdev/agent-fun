@@ -30,12 +30,12 @@ ok('30 bounty cards on home', cards === 30, String(cards));
 ok('no old hero / rail / chips', !(await p.$('[data-testid=featured-bounty]')) && !(await p.$('[data-testid=bounty-rail]')) && !(await p.getByText('All bounties', { exact: true }).count()));
 const rewards = await p.$$eval('[data-reward]', (els) => els.map((e) => Number(e.getAttribute('data-reward'))));
 ok('Trending sorted by reward desc', rewards.every((r, i) => i === 0 || rewards[i - 1] >= r), rewards.slice(0, 5).join(','));
-// Order under the header: the toolbar icons, then the trending carousel, then the grid.
+// Order under the header: the trending carousel, then the toolbar icons, then the grid.
 const headerBottom = await p.$eval('[data-testid=site-header]', (h) => h.getBoundingClientRect().bottom);
-const iconsBottom = await p.$eval('[data-testid=all-bounties] button[aria-label="Search bounties"]', (b) => b.getBoundingClientRect().bottom);
+const toolbar = await p.$eval('[data-testid=all-bounties] button[aria-label="Search bounties"]', (b) => { const r = b.getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; });
 const carousel = await p.$eval('[data-testid=trending-carousel]', (c) => { const r = c.getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; }).catch(() => null);
 const firstTop = await p.$eval('[data-testid=bounty-card]', (c) => c.getBoundingClientRect().top);
-ok('toolbar icons, then the carousel, then the grid', !!carousel && iconsBottom - headerBottom < 80 && carousel.top >= iconsBottom && carousel.top - iconsBottom < 24 && firstTop - carousel.bottom < 40, carousel ? `icons end ${Math.round(iconsBottom - headerBottom)}px under the header, carousel ${Math.round(carousel.top - iconsBottom)}px under the icons, first card ${Math.round(firstTop - carousel.bottom)}px under the carousel` : 'no carousel');
+ok('the carousel, then the toolbar icons, then the grid', !!carousel && carousel.top - headerBottom < 40 && toolbar.top >= carousel.bottom && toolbar.top - carousel.bottom < 24 && firstTop - toolbar.bottom < 40, carousel ? `carousel ${Math.round(carousel.top - headerBottom)}px under the header, icons ${Math.round(toolbar.top - carousel.bottom)}px under the carousel, first card ${Math.round(firstTop - toolbar.bottom)}px under the icons` : 'no carousel');
 ok('no pager or prev / next under the carousel', !(await p.$('[data-testid=carousel-prev]')) && !(await p.$('[data-testid=carousel-next]')) && !(await p.$('[data-testid=carousel-pager]')));
 ok('rotation control hidden until keyboard focus', (await p.$eval('[data-testid=carousel-rotation]', (b) => getComputedStyle(b).opacity)) === '0');
 // Its slides are Trending's top 5, in order, each with a GIF, the bounty (large), a top-3 leaderboard and its submission count.
@@ -58,9 +58,10 @@ ok('the slide across takes 333ms', slideMs === '0.333s', slideMs);
 await p.hover('[data-testid=carousel-slide][data-active=true]');
 ok('hovering pauses rotation', (await p.$eval('[data-testid=trending-carousel]', (c) => c.dataset.state)) === 'paused');
 await p.mouse.move(2, 890);
-// Keyboard: Tab from the toolbar's last icon reaches the rotation control, which shows itself and stops the slide show.
-await p.focus('[data-testid=all-bounties] button[aria-label="Saved bounties"]');
-await p.keyboard.press('Tab');
+// Keyboard: back from the toolbar's first icon, through the active slide's CTA and title, reaches the rotation control
+// (first in the carousel), which shows itself and stops the slide show.
+await p.focus('[data-testid=all-bounties] button[aria-label="Search bounties"]');
+for (let i = 0; i < 3; i++) await p.keyboard.press('Shift+Tab');
 const rot = await p.$eval('[data-testid=carousel-rotation]', (b) => ({ focused: b === document.activeElement, opacity: getComputedStyle(b).opacity, label: b.getAttribute('aria-label') }));
 ok('Tab reveals the rotation control and stops rotation', rot.focused && rot.opacity === '1' && rot.label === 'Start automatic slide show' && (await p.$eval('[data-testid=trending-carousel]', (c) => c.dataset.state)) === 'paused', JSON.stringify(rot));
 await p.keyboard.press('Enter');
