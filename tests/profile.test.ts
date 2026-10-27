@@ -358,7 +358,8 @@ test('U1.11 profileStats, earningsSeries and activity on the seeds equal the spe
   const paid = items.find((i) => i.id === 'paid:jupiter-launch-fill')!;
   assert.equal(paid.value, '+$6,000');
   assert.equal(paid.positive, true);
-  assert.equal(paid.slug, undefined);
+  // A past result now links its won bounty page.
+  assert.equal(paid.slug, 'jupiter-launch-fill');
   assert.equal(items.find((i) => i.id === 'finished:jupiter-launch-fill')!.value, '#1 of 64');
   assert.equal(items.find((i) => i.id === 'scored:AF-M4X8TB')!.value, '2.64 Sharpe');
   assert.equal(items.find((i) => i.id === 'scored:AF-3HWN6P')!.value, '0.538 nats');
@@ -576,4 +577,50 @@ test('U1.17 endedBoardResults: past a deadline the entry leaves Active, shows in
   // Seeds and past defs are untouched.
   assert.equal(pastResults(LOAD).length, PAST_RESULT_DEFS.length);
   assert.equal(seedEntries(LOAD).length, SEED_ENTRY_DEFS.length);
+});
+
+test('U1.18 past results are won bounties: slugs resolve with findBounty, endedAt is the deadline, numbers match', async () => {
+  const W = await import('../src/lib/wonBounties.ts');
+  assert.equal(LOAD, W.WON_LOAD, 'one load instant');
+  for (const p of past) {
+    assert.equal(p.slug, p.id);
+    const b = W.findBounty(p.slug!);
+    assert.ok(b, p.slug);
+    assert.ok(W.WON_BOUNTIES.includes(b), `${p.slug} is a won bounty`);
+    assert.equal(p.endedAt, b.deadline, p.slug);
+    assert.equal(p.title, b.title);
+    assert.equal(p.category, b.category);
+    assert.deepEqual(p.metric, b.resolution.metric);
+    assert.equal(p.rewardAmount, b.rewardAmount);
+    assert.equal(p.payout, prizeFor(b, p.finalRank), p.slug);
+  }
+  // The won bounties are past results, not board entries: an entry on one adds no ended board row.
+  const onWon: StoredEntry = { id: 'AF-WON001', bountySlug: 'jupiter-launch-fill', submittedAt: new Date(LOAD - 40 * DAY).toISOString(), selfScore: 1, agent: true };
+  const all = allEntries([onWon], LOAD, LOAD);
+  assert.deepEqual(endedBoardResults(all, handle, LOAD, [...BOARD_BOUNTIES, ...W.WON_BOUNTIES]), []);
+  const stats = profileStats(all, past, handle, [...BOARD_BOUNTIES, ...W.WON_BOUNTIES], LOAD);
+  assert.deepEqual([stats.endedCount, stats.totalEarned, stats.activeCount], [6, 11_500, 4]);
+});
+
+test('U1.19 myEntriesFor: a won slug you entered adds your final entry under the current handle; other slugs are unchanged', () => {
+  const { myEntriesFor, wonEntryFor } = P;
+  const jup = myEntriesFor(seeds, 'jupiter-launch-fill', 'newname');
+  assert.equal(jup.length, 1);
+  const e = jup[0];
+  assert.deepEqual({ ...e, createdAt: undefined }, { hunter: 'newname', status: 'passed', score: 182, createdAt: undefined, id: 'past-jupiter-launch-fill', agent: true });
+  assert.deepEqual(wonEntryFor('jupiter-launch-fill', 'newname'), e);
+  assert.equal(wonEntryFor('jupiter-launch-fill', 'other')!.createdAt, e.createdAt, 'fixed time');
+  // Live slugs: exactly toSubmissions.
+  for (const slug of [SOLANA, PERPS, LOGLOSS, FUZZ]) assert.deepEqual(myEntriesFor(seeds, slug, handle), toSubmissions(seeds, slug, handle));
+  // A won slug you did not enter, and an unknown slug: nothing added.
+  assert.deepEqual(myEntriesFor(seeds, 'pumpfun-launch-snipe', handle), []);
+  assert.equal(wonEntryFor('pumpfun-launch-snipe', handle), undefined);
+  assert.equal(wonEntryFor('nope', handle), undefined);
+  // Every past result's entry lands at its rank.
+  for (const p of past) {
+    const mine = myEntriesFor(seeds, p.slug!, handle);
+    const b = BOARD_BOUNTIES.find((x) => x.slug === p.slug);
+    assert.equal(b, undefined, 'not on the live board');
+    assert.equal(mine.length, 1);
+  }
 });

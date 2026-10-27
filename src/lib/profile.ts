@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { formatBountyAmount, type BoardBounty, type Submission, type SubmissionStatus } from './bounty';
-import { AGENT_POOL, BOARD_BOUNTIES, HUNTER_POOL } from './bountyData';
+import { AGENT_POOL, BOARD_BOUNTIES, HUNTER_POOL, isAgentHandle } from './bountyData';
+import { WON_BOUNTIES, WON_DEFS, WON_LOAD, wonEntryAt } from './wonBounties';
 
 /**
  * The profile data layer: the local profile, the entries filed through the submission form, the seeded history,
@@ -28,8 +29,8 @@ export const PAID_AFTER_DAYS = 3;
 export const PFP_SIZE = 256;
 export const PFP_MAX_BYTES = 5 * 1024 * 1024;
 export const NOW_TICK_MS = 15_000;
-/** Module-load instant; seeds and past results are placed relative to it (like the board). */
-export const PROFILE_LOAD = Date.now();
+/** Module-load instant, shared with the board and the won bounties (WON_LOAD): seeds and past results are placed relative to it, so a past result's endedAt is its won bounty's deadline. */
+export const PROFILE_LOAD = WON_LOAD;
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -256,39 +257,22 @@ export const SEED_ENTRY_DEFS: readonly SeedEntryDef[] = [
   },
 ];
 
-/** Finished bounties (none match a board title; none use a meme). */
-export const PAST_RESULT_DEFS: readonly PastResultDef[] = [
-  {
-    id: 'jupiter-launch-fill', title: 'Fastest median quote-to-fill on 500 Jupiter swaps during a token launch', category: 'Trading',
-    metric: { name: 'Median quote-to-fill', unit: 'ms', better: 'lower' }, dp: 0, score: 182, firstScore: 182,
-    finalRank: 1, fieldSize: 64, rewardAmount: 10_000, payout: 6_000, endedDaysAgo: 19,
-  },
-  {
-    id: 'macro-release-brier', title: 'Best Brier score calling 40 US macro data releases', category: 'Forecasting',
-    metric: { name: 'Brier score', unit: 'Brier', better: 'lower' }, dp: 3, score: 0.142, firstScore: 0.131,
-    finalRank: 2, fieldSize: 118, rewardAmount: 6_000, payout: 2_000, endedDaysAgo: 41,
-  },
-  {
-    id: 'ts-errors-under-budget', title: 'Most TypeScript errors fixed in a 400k-line monorepo at under $1 each', category: 'Automation',
-    metric: { name: 'Errors fixed', unit: '%', better: 'higher' }, dp: 1, score: 61.4, firstScore: 68.9,
-    finalRank: 3, fieldSize: 87, rewardAmount: 5_000, payout: 1_000, endedDaysAgo: 63,
-  },
-  {
-    id: 'drainer-detector-bypass', title: 'Highest bypass rate against a wallet-drainer transaction detector', category: 'Security',
-    metric: { name: 'Bypass rate', unit: '%', better: 'higher' }, dp: 1, score: 12.5, firstScore: 31.8,
-    finalRank: 11, fieldSize: 52, rewardAmount: 8_000, payout: 0, endedDaysAgo: 88,
-  },
-  {
-    id: 'connect-four-elo', title: 'Highest Elo in a 2,000-game Connect Four self-play ladder', category: 'Games',
-    metric: { name: 'Elo', unit: 'Elo', better: 'higher' }, dp: 0, score: 1688, firstScore: 1688,
-    finalRank: 1, fieldSize: 29, rewardAmount: 4_000, payout: 2_500, endedDaysAgo: 124,
-  },
-  {
-    id: 'cold-email-replies', title: 'Most positive replies per 1,000 cold emails to seed-stage founders', category: 'Growth',
-    metric: { name: 'Positive replies', unit: 'replies', better: 'higher' }, dp: 1, score: 18.0, firstScore: 41.2,
-    finalRank: 24, fieldSize: 41, rewardAmount: 3_000, payout: 0, endedDaysAgo: 171,
-  },
-];
+/**
+ * Finished bounties you entered: the won bounties with a `you` row (wonBounties.ts holds the numbers), most recent
+ * first. id and slug are the won bounty's slug; payout = rewards[your rank] (0 when unplaced).
+ */
+export const PAST_RESULT_DEFS: readonly PastResultDef[] = WON_DEFS.filter((d) => d.you)
+  .map((d): PastResultDef => {
+    const you = d.you!;
+    return {
+      id: d.slug, slug: d.slug, title: d.title, category: d.category, metric: { ...d.metric }, dp: d.dp,
+      score: you.score, firstScore: d.winningScore, finalRank: you.rank, fieldSize: d.fieldSize, rewardAmount: d.rewardAmount,
+      payout: d.rewards[String(you.rank) as '1' | '2' | '3'] ?? 0, endedDaysAgo: d.endedDaysAgo,
+    };
+  })
+  .sort((a, b) => a.endedDaysAgo - b.endedDaysAgo);
+
+const WON_SLUGS = new Set(WON_DEFS.map((d) => d.slug));
 
 const iso = (t: number) => new Date(t).toISOString();
 
@@ -314,7 +298,7 @@ export function seedEntries(loadedAt: number = PROFILE_LOAD): Entry[] {
   }).sort(byOldest);
 }
 
-/** Past results materialised relative to `loadedAt` (endedAt = loadedAt - endedDaysAgo days). */
+/** Past results materialised relative to `loadedAt` (endedAt = loadedAt - endedDaysAgo days: at PROFILE_LOAD, the won bounty's deadline). Each carries its won bounty's slug. */
 export function pastResults(loadedAt: number = PROFILE_LOAD): PastResult[] {
   return PAST_RESULT_DEFS.map(({ endedDaysAgo, ...d }) => ({ ...d, metric: { ...d.metric }, endedAt: iso(loadedAt - endedDaysAgo * DAY) }));
 }
@@ -488,6 +472,24 @@ export function toSubmissions(entries: Entry[], slug: string, handle: string): S
     });
 }
 
+/**
+ * Your final entry on a won bounty you entered (WON_DEFS.you), under `handle`: passed with your score, placed at a
+ * fixed instant inside the open window (62% of the way from publishedAt to the deadline). Undefined for any other slug.
+ */
+export function wonEntryFor(slug: string, handle: string): Submission | undefined {
+  const def = WON_DEFS.find((d) => d.slug === slug);
+  const bounty = WON_BOUNTIES.find((b) => b.slug === slug);
+  if (!def?.you || !bounty) return undefined;
+  return { hunter: handle, status: 'passed', score: def.you.score, createdAt: wonEntryAt(bounty), id: `past-${slug}`, agent: true };
+}
+
+/** toSubmissions(entries, slug, handle), plus your final entry when `slug` is a won bounty you entered. */
+export function myEntriesFor(entries: Entry[], slug: string, handle: string): Submission[] {
+  const subs = toSubmissions(entries, slug, handle);
+  const past = wonEntryFor(slug, handle);
+  return past ? [...subs, past] : subs;
+}
+
 /* ---------- the standings engine (the only ranking code in the app) ---------- */
 const isScored = (s: Submission): s is Submission & { score: number } =>
   s.status === 'passed' && typeof s.score === 'number' && Number.isFinite(s.score);
@@ -504,6 +506,44 @@ export function leaderboard(bounty: BoardBounty, extra: Submission[] = []): Lead
     if (!cur || cmp(row, cur) < 0) best.set(s.hunter, row);
   }
   return [...best.values()].sort(cmp).map((r, i) => ({ ...r, rank: i + 1 }));
+}
+
+/** One paid place on a bounty's final (or current) leaderboard. */
+export interface Winner {
+  place: number;
+  hunter: string;
+  score: number;
+  /** USD: bounty.rewards[place]. */
+  payout: number;
+  agent: boolean;
+  /** hunter === the handle passed in. */
+  you: boolean;
+}
+
+/**
+ * The paid places (the keys of bounty.rewards, in place order) filled from leaderboard(bounty, extra); a place with
+ * nobody scored in it is left out. `agent` comes from the hunter's submissions (falling back to the handle's shape).
+ */
+export function winnersOf(bounty: BoardBounty, extra: Submission[] = [], handle?: string): Winner[] {
+  const rows = leaderboard(bounty, extra);
+  const rewards = bounty.rewards ?? {};
+  const places = Object.keys(rewards).map(Number).filter((n) => Number.isInteger(n) && n >= 1).sort((a, b) => a - b);
+  const agentOf = new Map<string, boolean>();
+  for (const s of [...bounty.submissions, ...extra]) if (typeof s.agent === 'boolean') agentOf.set(s.hunter, s.agent);
+  const out: Winner[] = [];
+  for (const place of places) {
+    const r = rows[place - 1];
+    if (!r) continue;
+    out.push({
+      place,
+      hunter: r.hunter,
+      score: r.score,
+      payout: rewards[String(place)] ?? 0,
+      agent: agentOf.get(r.hunter) ?? isAgentHandle(r.hunter),
+      you: handle !== undefined && r.hunter === handle,
+    });
+  }
+  return out;
 }
 
 /** Rounds away float noise (1.12 - 1.04 = 0.0800000000000001). */
@@ -648,7 +688,8 @@ export function endedBoardResults(entries: Entry[], handle: string, now: number,
   const out: EndedBoardResult[] = [];
   for (const slug of new Set(entries.map((e) => e.bountySlug))) {
     const bounty = bySlug.get(slug);
-    if (!bounty || isOpen(bounty, now)) continue;
+    // A won bounty is a past result (pastResults), never a board entry: skipping it here keeps it from counting twice.
+    if (!bounty || isOpen(bounty, now) || WON_SLUGS.has(slug)) continue;
     const end = Date.parse(bounty.deadline);
     const atEnd: BoardBounty = { ...bounty, submissions: bounty.submissions.filter((s) => Date.parse(s.createdAt) <= end) };
     const mine = toSubmissions(entries.filter((e) => Date.parse(e.submittedAt) <= end), slug, handle);
@@ -809,7 +850,7 @@ function takenSet(): Set<string> {
   const add = (h: string | undefined) => h && set.add(h.toLowerCase());
   for (const h of HUNTER_POOL) add(h);
   for (const h of AGENT_POOL) add(h);
-  for (const b of BOARD_BOUNTIES) {
+  for (const b of [...BOARD_BOUNTIES, ...WON_BOUNTIES]) {
     add(b.sponsor.slug);
     for (const s of b.submissions) add(s.hunter);
     for (const m of b.chat) add(m.author);
@@ -818,7 +859,7 @@ function takenSet(): Set<string> {
   return set;
 }
 
-/** True if any board hunter, chat author, sponsor slug, HUNTER_POOL or AGENT_POOL name equals it (lowercased). */
+/** True if any board or won-bounty hunter, chat author, sponsor slug, HUNTER_POOL or AGENT_POOL name equals it (lowercased). */
 export function isHandleTaken(handle: string): boolean {
   return takenSet().has(handle.trim().toLowerCase());
 }
@@ -945,9 +986,16 @@ export function useEntries(): Entry[] {
   return useMemo(() => allEntries(parseStoredEntries(raw), now), [raw, now]);
 }
 
-/** This bounty's entries as Submissions under the current handle, oldest first: what BountyPage passes as `injected`. */
+/** This bounty's entries as Submissions under the current handle, oldest first: what BountyPage passes as `injected`. On a won bounty you entered, your final entry rides along (myEntriesFor). */
 export function useMyEntries(slug: string): Submission[] {
   const { handle } = useProfile();
   const entries = useEntries();
-  return useMemo(() => toSubmissions(entries, slug, handle), [entries, slug, handle]);
+  return useMemo(() => myEntriesFor(entries, slug, handle), [entries, slug, handle]);
+}
+
+/** The paid places of `bounty` (with your entries and handle): what the won bounty card and page show. */
+export function useWinners(bounty: BoardBounty): Winner[] {
+  const { handle } = useProfile();
+  const mine = useMyEntries(bounty.slug);
+  return useMemo(() => winnersOf(bounty, mine, handle), [bounty, mine, handle]);
 }

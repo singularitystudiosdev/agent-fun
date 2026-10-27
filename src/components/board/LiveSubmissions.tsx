@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { BoardBounty, Submission } from '../../lib/bounty';
+import { formatScore, scoreDecimals } from '../../lib/profile';
 
 /**
  * LIVE SUBMISSIONS: a bounty page's right column. A header (title, running total) over one list of who submitted,
@@ -9,7 +10,8 @@ import type { BoardBounty, Submission } from '../../lib/bounty';
  * sit in the list at their real times, marked with a muted "(you)"; a new one is the newest, so it lands on top like any
  * arrival. Each arrival opens its row (grid-rows 0fr -> 1fr, so the rows below glide
  * down), slides down and fades in over 300 ms, and holds a pk-blue-100 highlight that fades out by about 2 s. Under
- * reduced motion rows just appear.
+ * reduced motion rows just appear. Once the deadline passes the panel is the final field: "Submissions", no stream and no
+ * entrance, every row newest first with its verified score in the bounty's metric (or "Not scored").
  */
 
 const FOCUS_RING = 'outline-none focus-visible:ring-2 focus-visible:ring-pk-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-pk-surface';
@@ -59,7 +61,12 @@ interface Row {
   live?: boolean;
   /** The viewer's own entry (from `injected`): gets a muted "(you)". */
   you?: boolean;
+  /** The verified score (passed submissions only): shown once the bounty has ended. */
+  score?: number;
 }
+
+/** A passed submission's verified score, else undefined. */
+const scoreOf = (s: Submission): number | undefined => (s.status === 'passed' && typeof s.score === 'number' && Number.isFinite(s.score) ? s.score : undefined);
 
 /**
  * One arrival for stream tick `n`: about half agents; an existing hunter about 45% of the time, else a new name. Never
@@ -81,7 +88,7 @@ function makeArrival(slug: string, n: number, existing: readonly Row[], at: numb
 
 const toRows = (subs: readonly Submission[], slug: string): Row[] =>
   subs
-    .map((s, i) => ({ key: s.id ?? `${slug}-${i}`, hunter: s.hunter, agent: Boolean(s.agent), createdAt: s.createdAt, i }))
+    .map((s, i) => ({ key: s.id ?? `${slug}-${i}`, hunter: s.hunter, agent: Boolean(s.agent), createdAt: s.createdAt, score: scoreOf(s), i }))
     .sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0) || b.i - a.i)
     .slice(0, MAX_ROWS)
     .map(({ i: _i, ...r }) => r);
@@ -105,6 +112,7 @@ export function takeInjected(
       hunter: s.hunter,
       agent: Boolean(s.agent),
       createdAt: s.createdAt,
+      score: scoreOf(s),
       you: true,
       ...(live ? { live: true } : {}),
     }))
@@ -229,8 +237,10 @@ function LiveSubmissionsPanel({ bounty, onTotal, injected, viewerHandle }: LiveS
 
   // The viewer's own entries: each new item in `injected` (a fresh submit, so the newest) lands on top like any arrival.
   const seenMine = useRef(initialMine.seen);
+  // Your new entries only land with the entrance while the bounty is open.
+  const openRef = useRef(Number.isNaN(deadlineMs) || Date.now() < deadlineMs);
   useEffect(() => {
-    const { rows: mine, seen } = takeInjected(injected, seenMine.current, slug, true);
+    const { rows: mine, seen } = takeInjected(injected, seenMine.current, slug, openRef.current);
     seenMine.current = seen;
     const at = Date.now();
     // Oldest first, so the newest ends on top.
@@ -238,6 +248,13 @@ function LiveSubmissionsPanel({ bounty, onTotal, injected, viewerHandle }: LiveS
   }, [injected, slug, land]);
 
   const open = Number.isNaN(deadlineMs) || now < deadlineMs;
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
+  // Ended: each row carries its final score in the bounty's metric.
+  const metric = bounty.resolution?.metric;
+  const dp = scoreDecimals(bounty);
+  const scoreText = (r: Row): string | null => (open ? null : r.score === undefined ? 'Not scored' : formatScore(r.score, metric ?? { unit: '' }, dp));
 
   // Relative times refresh every 15 s; flip to closed exactly at the deadline.
   useEffect(() => {
@@ -319,13 +336,13 @@ function LiveSubmissionsPanel({ bounty, onTotal, injected, viewerHandle }: LiveS
 
       {rows.length === 0 ? (
         <div className="mx-4 mb-4 flex flex-col items-center gap-3 rounded-xl bg-pk-gray-100 px-6 py-6 text-center" data-testid="live-empty">
-          <p className="text-body-base text-pk-content-secondary">No submissions yet.</p>
+          <p className="text-body-base text-pk-content-secondary">{open ? 'No submissions yet.' : 'No entries were submitted.'}</p>
           <button
             type="button"
             onClick={() => focusChatComposer()}
             className={`inline-flex h-9 items-center rounded-md bg-pk-brand-500 px-4 text-body-base font-semibold text-pk-elevated transition-opacity hover:opacity-90 motion-reduce:transition-none ${FOCUS_RING}`}
           >
-            Submit an entry
+            {open ? 'Submit an entry' : 'Go to the discussion'}
           </button>
         </div>
       ) : (
@@ -336,7 +353,7 @@ function LiveSubmissionsPanel({ bounty, onTotal, injected, viewerHandle }: LiveS
           tabIndex={0}
         >
           {rows.map((r) => (
-            <FeedRow key={r.key} row={r} now={now} fresh={fresh.has(r.key)} viewerHandle={viewerHandle} />
+            <FeedRow key={r.key} row={r} now={now} fresh={fresh.has(r.key)} viewerHandle={viewerHandle} score={scoreText(r)} />
           ))}
         </ol>
       )}
@@ -373,7 +390,7 @@ function TotalDigits({ value, animate }: { value: number; animate: boolean }) {
   );
 }
 
-function FeedRow({ row, now, fresh, viewerHandle }: { row: Row; now: number; fresh: boolean; viewerHandle?: string }) {
+function FeedRow({ row, now, fresh, viewerHandle, score }: { row: Row; now: number; fresh: boolean; viewerHandle?: string; score?: string | null }) {
   // Stream rows mount collapsed and above, then open and slide down on the next frame (instant under reduced motion).
   const entered = useEntered(Boolean(row.live));
   const when = relativeTime(row.createdAt, now);
@@ -404,10 +421,24 @@ function FeedRow({ row, now, fresh, viewerHandle }: { row: Row; now: number; fre
               (you)
             </span>
           )}
-          {when && (
-            <time dateTime={row.createdAt} className="ml-auto shrink-0 pl-2 text-body-xs text-pk-content-tertiary tabular-nums">
-              {when}
-            </time>
+          {score ? (
+            // Ended: the final score, with when it was submitted under it.
+            <span className="ml-auto flex shrink-0 flex-col items-end pl-2" data-testid="live-row-final">
+              <span className={`text-body-sm tabular-nums ${row.score === undefined ? 'text-pk-content-tertiary' : 'font-semibold text-pk-content-primary'}`} data-testid="live-row-score">
+                {score}
+              </span>
+              {when && (
+                <time dateTime={row.createdAt} className="text-body-xs text-pk-content-tertiary tabular-nums">
+                  {when}
+                </time>
+              )}
+            </span>
+          ) : (
+            when && (
+              <time dateTime={row.createdAt} className="ml-auto shrink-0 pl-2 text-body-xs text-pk-content-tertiary tabular-nums">
+                {when}
+              </time>
+            )
           )}
         </div>
       </div>

@@ -1,0 +1,25 @@
+{
+  "name": "Thanos 'Perfectly Balanced'",
+  "slug": "e-thanos-perfectly-balanced",
+  "kind": "still",
+  "source": {
+    "url": "https://imgflip.com/memetemplate/224679348/thanos-perfectly-balanced-as-all-things-should-be-meme-template",
+    "media": "https://i.imgflip.com/3prnp0.jpg",
+    "imgflipTemplateId": 224679348,
+    "retrieved": "2026-10-27",
+    "note": "Imgflip blank (caption-free) template"
+  },
+  "crop": {
+    "x": 210,
+    "y": 286,
+    "size": 280
+  },
+  "output": {
+    "width": 192,
+    "height": 192,
+    "bytes": 6172,
+    "frames": 1,
+    "quality": 86,
+    "still": null
+  }
+}

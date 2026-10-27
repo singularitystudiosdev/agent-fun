@@ -1,0 +1,27 @@
+{
+  "name": "Vegeta 'It's Over 9000'",
+  "slug": "e-vegeta-over-9000",
+  "kind": "animated",
+  "source": {
+    "url": "https://imgflip.com/memetemplate/303884769/ITS-OVER-9000",
+    "media": "https://i.imgflip.com/50xazl.mp4",
+    "imgflipTemplateId": 303884769,
+    "retrieved": "2026-10-27",
+    "note": "Imgflip blank (caption-free) template"
+  },
+  "crop": {
+    "x": 150,
+    "y": 30,
+    "size": 660
+  },
+  "output": {
+    "width": 192,
+    "height": 192,
+    "bytes": 133748,
+    "frames": 31,
+    "frameMs": 100,
+    "quality": 50,
+    "fps": 10,
+    "still": "still.png"
+  }
+}

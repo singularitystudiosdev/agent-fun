@@ -3,12 +3,14 @@ import { AllBounties } from './components/board/AllBounties';
 import { BountyPage } from './components/board/BountyPage';
 import { SiteHeader } from './components/board/SiteHeader';
 import { ProfilePage } from './components/profile/ProfilePage';
-import { applyBoardFilters, DEFAULT_PANEL_FILTERS, isBoardSort, sortBounties, tabDefaultSort, type BoardSort, type PanelFilters } from './lib/boardFilters';
-import { DEFAULT_TAB, isBoardTab, selectBounties, type BoardTab } from './lib/boardTabs';
+import { applyBoardFilters, DEFAULT_PANEL_FILTERS, isSortFor, sortBounties, tabDefaultSort, type BoardSort, type PanelFilters } from './lib/boardFilters';
+import { boardPath, DEFAULT_STATUS, DEFAULT_TAB, hasTab, isBoardStatus, isBoardTab, selectBounties, type BoardStatus, type BoardTab } from './lib/boardTabs';
+import type { BoardBounty } from './lib/bounty';
 import { BOARD_BOUNTIES } from './lib/bountyData';
 import { appHref, appPath } from './lib/paths';
 import { useProfile } from './lib/profile';
 import { useSavedIds } from './lib/saved';
+import { findBounty, WON_BOUNTIES } from './lib/wonBounties';
 import { ReplicaView } from './ReplicaView';
 
 const view = new URLSearchParams(window.location.search).get('view');
@@ -18,9 +20,19 @@ const isProfilePath = (p: string) => p === PROFILE_PATH || p === `${PROFILE_PATH
 /** The current app path (the Pages base stripped): "/", "/bounty/<slug>" or "/profile". */
 const currentPath = () => appPath(window.location.pathname);
 
+/** Every bounty the board knows: the open listings and every previously won one. Each mode picks its own from this. */
+const ALL_BOUNTIES: BoardBounty[] = [...BOARD_BOUNTIES, ...WON_BOUNTIES];
+
+/** `?status=won` is the Won bounties board; no param (or anything else) is Live. */
+const readStatus = (): BoardStatus => {
+  const s = new URLSearchParams(window.location.search).get('status');
+  return isBoardStatus(s) ? s : DEFAULT_STATUS;
+};
+
+/** The URL's tab, when the URL's mode has it (Won has no "Ending soon"); else Trending. */
 const readTab = (): BoardTab => {
   const t = new URLSearchParams(window.location.search).get('tab');
-  return isBoardTab(t) ? t : DEFAULT_TAB;
+  return isBoardTab(t) && hasTab(readStatus(), t) ? t : DEFAULT_TAB;
 };
 
 /** The board search lives in `?q=` so a filtered board can be shared and survives a reload. */
@@ -29,7 +41,7 @@ const readQuery = (): string => new URLSearchParams(window.location.search).get(
 /** A sort the user picked over the tab's default lives in `?sort=`; absent or unknown means the tab's own order. */
 const readSort = (): BoardSort | null => {
   const s = new URLSearchParams(window.location.search).get('sort');
-  return isBoardSort(s) ? s : null;
+  return isSortFor(readStatus(), s) ? s : null;
 };
 
 /** agent.fun: the bounty grid (header tabs filter and sort it), one page per bounty at /bounty/<slug>, and your profile at /profile. */
@@ -40,6 +52,7 @@ export default function App() {
 
 function Board() {
   const [path, setPath] = useState(currentPath);
+  const [status, setStatus] = useState<BoardStatus>(readStatus);
   const [tab, setTab] = useState<BoardTab>(readTab);
   const [query, setQuery] = useState(readQuery);
   const [filters, setFilters] = useState<PanelFilters>(DEFAULT_PANEL_FILTERS);
@@ -60,6 +73,7 @@ function Board() {
     if (appPath(url.pathname) === '/' && queryRef.current && !url.searchParams.has('q')) url.searchParams.set('q', queryRef.current);
     window.history.pushState(null, '', url.pathname + url.search + url.hash);
     setPath(currentPath());
+    setStatus(readStatus());
     setTab(readTab());
     // A tab click or the logo starts that tab in its own order (the sort, unlike the search, does not follow).
     setSortOverride(readSort());
@@ -70,6 +84,7 @@ function Board() {
   useEffect(() => {
     const onPop = () => {
       setPath(currentPath());
+      setStatus(readStatus());
       setTab(readTab());
       // Back/Forward onto the board restores that entry's search and sort (none in the URL: the tab's own order);
       // a bounty page keeps the current ones.
@@ -98,20 +113,31 @@ function Board() {
     };
   }, [navigate]);
 
-  const selectTab = useCallback(
-    (next: BoardTab) => navigate(appHref(next === DEFAULT_TAB ? '/' : `/?tab=${encodeURIComponent(next)}`)),
-    [navigate],
-  );
+  /** A header tab, in the current mode. */
+  const selectTab = useCallback((next: BoardTab) => navigate(appHref(boardPath(status, next))), [navigate, status]);
 
   const onProfile = isProfilePath(path);
   const slug = path.startsWith(BOUNTY_PREFIX) ? decodeURIComponent(path.slice(BOUNTY_PREFIX.length)) : null;
-  const bounty = slug ? BOARD_BOUNTIES.find((b) => b.slug === slug) : undefined;
-  const tabbed = useMemo(() => selectBounties(BOARD_BOUNTIES, tab), [tab]);
-  const defaultSort = tabDefaultSort(tab);
+  const onBoard = !onProfile && slug === null;
+
+  /**
+   * The Live / Won switch: the board in that mode. The search follows (navigate carries `q`), the sort override resets, and the
+   * tab stays when the new mode has it (Trading -> Trading), else Trending. Off the board it opens that mode's Trending.
+   */
+  const selectStatus = useCallback(
+    (next: BoardStatus) => navigate(appHref(boardPath(next, onBoard && hasTab(next, tab) ? tab : DEFAULT_TAB))),
+    [navigate, onBoard, tab],
+  );
+
+  const bounty = slug ? findBounty(slug) : undefined;
+  const tabbed = useMemo(() => selectBounties(ALL_BOUNTIES, tab, Date.now(), status), [tab, status]);
+  const defaultSort = tabDefaultSort(tab, status);
   const sort = sortOverride ?? defaultSort;
+  /** Won bounties have no deadline ahead, so the hidden "Ends within" filter never applies there. */
+  const modeFilters = useMemo<PanelFilters>(() => (status === 'won' ? { ...filters, endsWithin: 'any' } : filters), [filters, status]);
   const shown = useMemo(
-    () => sortBounties(applyBoardFilters(tabbed, { query, ...filters, savedOnly }, savedIds), sort),
-    [tabbed, query, filters, savedOnly, savedIds, sort],
+    () => sortBounties(applyBoardFilters(tabbed, { query, ...modeFilters, savedOnly }, savedIds), sort),
+    [tabbed, query, modeFilters, savedOnly, savedIds, sort],
   );
   /** Only a sort that differs from the tab's default goes in the URL. */
   const sortParam = sort === defaultSort ? null : sort;
@@ -143,14 +169,18 @@ function Board() {
       ? `${profile.displayName} (@${profile.handle}) | agent.fun`
       : bounty
         ? `${bounty.title} | agent.fun`
-        : 'agent.fun';
-  }, [bounty, onProfile, profile.displayName, profile.handle]);
+        : slug === null && status === 'won'
+          ? 'Won bounties | agent.fun'
+          : 'agent.fun';
+  }, [bounty, onProfile, slug, status, profile.displayName, profile.handle]);
 
   return (
     <div className="min-h-dvh bg-pk-surface text-pk-content-primary">
       <SiteHeader
-        bounties={BOARD_BOUNTIES}
-        tab={slug || onProfile ? null : tab}
+        bounties={ALL_BOUNTIES}
+        status={status}
+        onStatusChange={selectStatus}
+        tab={onBoard ? tab : null}
         onTabChange={selectTab}
         query={query}
         onQueryChange={changeHeaderQuery}
@@ -161,14 +191,15 @@ function Board() {
           <ProfilePage />
         ) : slug === null ? (
           <>
-            <h1 className="sr-only">agent.fun bounties</h1>
+            <h1 className="sr-only">{status === 'won' ? 'Won bounties' : 'agent.fun bounties'}</h1>
             <AllBounties
+              status={status}
               bounties={shown}
               total={tabbed.length}
               onShowAll={() => selectTab(DEFAULT_TAB)}
               query={query}
               onQueryChange={setQuery}
-              filters={filters}
+              filters={modeFilters}
               onFiltersChange={setFilters}
               savedOnly={savedOnly}
               onSavedOnlyChange={setSavedOnly}

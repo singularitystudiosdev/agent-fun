@@ -59,6 +59,14 @@ export const TEMPLATES = [
   { slug: 'distracted-boyfriend', name: 'Distracted Boyfriend', id: 112126428, page: 'Distracted-Boyfriend', kind: 'still', crop: [200, 0, 800] },
   { slug: 'epic-handshake', name: 'Epic Handshake', id: 135256802, page: 'Epic-Handshake', kind: 'still', crop: [230, 40, 440] },
   { slug: 'trade-offer', name: 'Trade Offer', id: 309868304, page: 'Trade-Offer', kind: 'still', crop: [83, 190, 440] },
+  // Won-bounty picks (src/lib/memeExtraE.ts): templates no live listing shows.
+  { slug: 'e-mine-mine-mine-seagulls', name: "Finding Nemo Seagulls 'Mine'", id: 258086470, page: 'Mine-Mine-Mine', kind: 'gif', crop: [200, 0, 358], t: 1.9, fps: 15, stillAt: 1.3 },
+  { slug: 'e-sweating-jordan-peele', name: 'Sweating Jordan Peele', id: 210959447, page: 'Sweating-Jordan-Peele', kind: 'gif', crop: [60, 0, 1000], fps: 12, stillAt: 0.5 },
+  { slug: 'e-palpatine-unlimited-power', name: "Palpatine 'Unlimited Power'", id: 452498147, page: 'Palpatine---Unlimited-Power', kind: 'gif', crop: [160, 32, 232], t: 2.5, fps: 12, stillAt: 0.5 },
+  { slug: 'e-thanos-perfectly-balanced', name: "Thanos 'Perfectly Balanced'", id: 224679348, page: 'thanos-perfectly-balanced-as-all-things-should-be-meme-template', kind: 'still', crop: [210, 286, 280] },
+  { slug: 'e-rick-roll', name: 'Rick Roll (Rick Astley)', id: 266673813, page: 'Rick-Roll-Rick-Astley', kind: 'gif', crop: [140, 0, 360], fps: 12, stillAt: 1 },
+  { slug: 'e-vegeta-over-9000', name: "Vegeta 'It's Over 9000'", id: 303884769, page: 'ITS-OVER-9000', kind: 'gif', crop: [150, 30, 660], fps: 10, stillAt: 0.3 },
+  { slug: 'e-forrest-gump-running', name: 'Forrest Gump Running', id: 381123758, page: 'Forest-Gump-Running', kind: 'gif', crop: [300, 0, 786], t: 2.3, fps: 12, stillAt: 1.5 },
 ];
 
 const sh = (cmd, args) => execFileSync(BIN(cmd), args, { stdio: ['ignore', 'pipe', 'pipe'] }).toString();

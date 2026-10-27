@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, useSyncExternalStore, type MouseEvent, type ReactNode } from 'react';
 import { formatBountyAmount, formatEndedOn, type BoardBounty } from '../../lib/bounty';
 import { formatCountdown, isExpired, isUrgent, useCountdown } from '../../lib/countdown';
 import { RollingTime } from '../BountyCard';
@@ -9,8 +9,10 @@ import { BountyDescription } from './BountyDescription';
 import { LiveSubmissions } from './LiveSubmissions';
 import { appHref } from '../../lib/paths';
 import { useMyEntries, useProfile } from '../../lib/profile';
+import { isEnded } from '../../lib/wonBounties';
 import { ResolutionPanel } from './ResolutionPanel';
 import { SubmissionForm } from './SubmissionForm';
+import { WinnersPanel } from './WinnersPanel';
 
 const FOCUS_RING = 'outline-none focus-visible:ring-2 focus-visible:ring-pk-gray-400 focus-visible:ring-offset-2';
 const ICON_BUTTON = `inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-pk-content-primary transition-colors hover:bg-pk-hover-overlay-darker motion-reduce:transition-none ${FOCUS_RING}`;
@@ -74,6 +76,18 @@ function SubmitEntryLink() {
   );
 }
 
+/** The header pill's closed state on an ended bounty: the same chip, muted, and not a link. */
+function SubmitClosedChip() {
+  return (
+    <span
+      data-testid="bounty-submit-closed"
+      className="mr-1 hidden h-8 items-center rounded-full bg-pk-gray-100 px-3.5 text-body-sm font-semibold whitespace-nowrap text-pk-content-secondary sm:inline-flex"
+    >
+      Entries closed
+    </span>
+  );
+}
+
 const safeDate = (iso: string | undefined): string | null => (iso && !Number.isNaN(Date.parse(iso)) ? formatEndedOn(iso) : null);
 
 function CopyLinkButton({ bounty }: { bounty: BoardBounty }) {
@@ -100,11 +114,11 @@ function CopyLinkButton({ bounty }: { bounty: BoardBounty }) {
   );
 }
 
-/** Label / value rows: the reward, the live countdown, every placement, skills, submissions and when it opened. */
-function Facts({ bounty, liveTotal }: { bounty: BoardBounty; liveTotal?: number }) {
+/** Label / value rows: the reward, the live countdown (the end date once ended), every placement, skills, submissions and when it opened. */
+function Facts({ bounty, liveTotal, ended = false }: { bounty: BoardBounty; liveTotal?: number; ended?: boolean }) {
   const labelId = useId();
   const remaining = useCountdown(bounty.deadline);
-  const expired = isExpired(remaining);
+  const expired = ended || isExpired(remaining);
   const places = Object.entries(bounty.rewards ?? {})
     .map(([k, usd]) => [Number(k), usd] as const)
     .filter(([k, usd]) => Number.isFinite(k) && usd > 0)
@@ -182,6 +196,19 @@ function Facts({ bounty, liveTotal }: { bounty: BoardBounty; liveTotal?: number 
   );
 }
 
+/** True at lg and up (Tailwind's lg, the two-column layout), live across resizes. */
+const LG_QUERY = '(min-width: 1024px)';
+function useIsLarge(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      const query = window.matchMedia(LG_QUERY);
+      query.addEventListener('change', onChange);
+      return () => query.removeEventListener('change', onChange);
+    },
+    () => window.matchMedia(LG_QUERY).matches,
+  );
+}
+
 /** Height of the sticky site header, so the right column can stick just below it whatever the header's size. */
 function useHeaderHeight(fallback = 132): number {
   const [h, setH] = useState(fallback);
@@ -200,7 +227,8 @@ function useHeaderHeight(fallback = 132): number {
 /**
  * One bounty's page, after polymarket.com's event page. LEFT: everything about the bounty (header, facts, the full
  * brief) and how its winner is verified. RIGHT (sticky under the header at lg): live submissions. BELOW both, full width:
- * the discussion. Below lg everything stacks in that order.
+ * the discussion. Below lg everything stacks in that order. An ended bounty adds the Winners panel (top of the right
+ * column; below lg, under the header), reads "Ended" with its date in the facts and takes no entries.
  */
 export function BountyPage({ bounty }: { bounty: BoardBounty }) {
   const headerH = useHeaderHeight();
@@ -212,6 +240,11 @@ export function BountyPage({ bounty }: { bounty: BoardBounty }) {
   // your current handle. They survive a reload; the live panel interleaves them by time and lands each new one on top.
   const profile = useProfile();
   const mine = useMyEntries(bounty.slug);
+  // An ended (won) bounty: Winners on top of the right column, the end date in the facts, entries closed.
+  const ended = isEnded(bounty);
+  // One Winners panel: the top of the right column at lg; below lg, where everything stacks, right under the header so
+  // who won is the first thing on a phone too.
+  const large = useIsLarge();
 
   return (
     <article data-testid="bounty-page" aria-labelledby={`${aboutId}-title`} className="mx-auto w-full max-w-[1350px] px-4 pt-6 pb-16 lg:px-6">
@@ -240,13 +273,15 @@ export function BountyPage({ bounty }: { bounty: BoardBounty }) {
               </h1>
             </div>
             <div className="flex shrink-0 items-center gap-1 pt-0.5">
-              <SubmitEntryLink />
+              {ended ? <SubmitClosedChip /> : <SubmitEntryLink />}
               <CopyLinkButton bounty={bounty} />
               <BookmarkButton eventId={`bounty:${bounty.id}`} />
             </div>
           </header>
 
-          <Facts bounty={bounty} liveTotal={liveTotal} />
+          {ended && !large && <WinnersPanel bounty={bounty} />}
+
+          <Facts bounty={bounty} liveTotal={liveTotal} ended={ended} />
 
           <SubmissionForm bounty={bounty} scrollMargin={top} />
 
@@ -260,13 +295,14 @@ export function BountyPage({ bounty }: { bounty: BoardBounty }) {
           <ResolutionPanel resolution={bounty.resolution} />
         </div>
 
-        {/* RIGHT: live submissions, sticky under the header at lg */}
+        {/* RIGHT: live submissions (ended: the winners, then the final submissions), sticky under the header at lg */}
         <aside
-          aria-label="Live submissions"
+          aria-label={ended ? 'Results' : 'Live submissions'}
           data-testid="bounty-side"
           style={{ ['--side-top' as string]: `${top}px` }}
           className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-(--side-top) lg:max-h-[calc(100dvh-var(--side-top)-16px)] lg:w-[400px] lg:shrink-0 lg:overflow-y-auto lg:overscroll-contain lg:[scrollbar-width:thin] lg:[scrollbar-color:var(--color-pk-gray-300)_transparent]"
         >
+          {ended && large && <WinnersPanel bounty={bounty} />}
           <LiveSubmissions bounty={bounty} onTotal={setLiveTotal} injected={mine} viewerHandle={profile.handle} />
         </aside>
       </div>

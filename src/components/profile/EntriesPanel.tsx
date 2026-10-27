@@ -4,6 +4,7 @@ import { SelectMenu, type SelectMenuOption } from '../board/SelectMenu';
 import { bountyPath, formatBountyAmount, type BoardBounty } from '../../lib/bounty';
 import { BOARD_BOUNTIES } from '../../lib/bountyData';
 import { appHref } from '../../lib/paths';
+import { findBounty } from '../../lib/wonBounties';
 import {
   endedBoardResults,
   formatScore,
@@ -394,8 +395,10 @@ function EndedItem({ result: p }: { result: PastResult }) {
   const score = p.unscored ? 'No score' : formatScore(p.score, p.metric, p.dp);
   const ended = `Ended ${ENDED_ON.format(new Date(p.endedAt))}`;
   const entrants = `${p.fieldSize.toLocaleString('en-US')} ${p.fieldSize === 1 ? 'entrant' : 'entrants'}`;
-  // A board bounty that ended keeps its own meme and links back to its page; a seeded past result gets a medal or flag.
+  // A board bounty that ended keeps its own meme; a seeded past result keeps its medal (or flag) tile, never a meme. Either
+  // links to its bounty page when the slug resolves (board bounties and the won bounties alike).
   const bounty = p.slug ? BOARD_BY_SLUG.get(p.slug) : undefined;
+  const target = p.slug ? (bounty ?? findBounty(p.slug)) : undefined;
   const cells = (
     <>
       <span className="flex min-w-0 flex-col gap-0.5">
@@ -449,9 +452,17 @@ function EndedItem({ result: p }: { result: PastResult }) {
     </>
   );
   return (
-    <li data-testid="profile-won-row"data-id={p.id} data-slug={p.slug} data-result={result} data-rank={p.unscored ? undefined : p.finalRank} className="rounded-md odd:bg-pk-gray-100/60">
-      {bounty ? (
-        <a href={bountyPath(bounty.slug)} className={`${ENDED_ROW} transition-colors hover:bg-pk-gray-100 motion-reduce:transition-none ${FOCUS_RING}`}>
+    <li
+      data-testid="profile-won-row"
+      data-id={p.id}
+      data-slug={p.slug}
+      data-tile={bounty ? 'meme' : 'medal'}
+      data-result={result}
+      data-rank={p.unscored ? undefined : p.finalRank}
+      className="rounded-md odd:bg-pk-gray-100/60"
+    >
+      {target ? (
+        <a href={bountyPath(target.slug)} data-testid="profile-won-link" className={`${ENDED_ROW} transition-colors hover:bg-pk-gray-100 motion-reduce:transition-none ${FOCUS_RING}`}>
           {cells}
         </a>
       ) : (

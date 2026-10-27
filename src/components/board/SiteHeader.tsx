@@ -1,8 +1,9 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
 import type { BoardBounty } from '../../lib/bounty';
-import { BOARD_TABS, DEFAULT_TAB, tabCounts } from '../../lib/boardTabs';
-import type { BoardTab } from '../../lib/boardTabs';
+import { BOUNTY_CATEGORIES } from '../../lib/bounty';
+import { boardPath, DEFAULT_TAB, statusCounts, tabCounts, tabsFor } from '../../lib/boardTabs';
+import type { BoardStatus, BoardTab } from '../../lib/boardTabs';
 import { appHref } from '../../lib/paths';
 import { useProfile } from '../../lib/profile';
 import { Avatar } from '../profile/Avatar';
@@ -17,8 +18,8 @@ import { Avatar } from '../profile/Avatar';
 const BRAND_GIF = new URL('../../assets/brand/agent-army.webp', import.meta.url).href;
 const BRAND_STILL = new URL('../../assets/brand/agent-army-still.png', import.meta.url).href;
 
-/** Where a tab lives: the default tab is the bare board, every other one is `/?tab=<id>` (so middle-click opens it). */
-const tabHref = (id: BoardTab) => appHref(id === DEFAULT_TAB ? '/' : `/?tab=${encodeURIComponent(id)}`);
+/** Where a tab lives in a mode: Live Trending is the bare board, the rest add `?status=won` and/or `?tab=<id>` (so middle-click opens it). */
+const tabHref = (status: BoardStatus, id: BoardTab) => appHref(boardPath(status, id));
 
 /** Shared control chrome (clone BUTTON_BASE, minus polymarket-only mix utilities). */
 const CONTROL =
@@ -30,6 +31,20 @@ const TAB =
   'relative inline-flex h-full shrink-0 snap-start items-center gap-1.5 px-2.5 text-body-base font-semibold outline-none transition-colors duration-150 motion-reduce:transition-none rounded-md focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pk-content-secondary';
 const TAB_ACTIVE = `${TAB} text-pk-content-primary after:pointer-events-none after:absolute after:inset-x-2.5 after:bottom-0 after:h-0.5 after:rounded-full after:bg-pk-content-primary`;
 const TAB_INACTIVE = `${TAB} text-pk-content-secondary hover:text-pk-content-primary`;
+
+/**
+ * The Live bounties / Won bounties switch above the rail: the header's loudest type (heading-xl, 20px) and a 3px full-width
+ * underline (the rail's is 2px, inset). No side padding, so the underline spans exactly the label and its count.
+ */
+const STATUS =
+  'relative inline-flex h-full shrink-0 items-center gap-2 text-heading-xl font-semibold whitespace-nowrap outline-none rounded-md transition-colors duration-150 motion-reduce:transition-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-pk-content-secondary focus-visible:ring-offset-pk-surface';
+const STATUS_ACTIVE = `${STATUS} text-pk-content-primary after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-0.75 after:rounded-full after:bg-pk-content-primary`;
+const STATUS_INACTIVE = `${STATUS} text-pk-content-secondary hover:text-pk-content-primary`;
+
+const STATUS_LABELS: Record<BoardStatus, string> = { live: 'Live bounties', won: 'Won bounties' };
+
+/** Plain left clicks switch in place; modified clicks (new tab, new window) keep the browser's default. */
+const isPlainClick = (event: MouseEvent<HTMLAnchorElement>) => event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
 
 /* ---- Icons: polymarket's 20px glyph set as ported in the clone, plus a plain stroke mark for the wordmark. ---- */
 
@@ -138,18 +153,33 @@ function SearchField({ inputRef, id, value, onChange }: { inputRef: React.RefObj
   );
 }
 
-function Tab({ id, active, icon, label, count, onSelect }: { id: BoardTab; active: boolean; icon?: ReactNode; label: string; count: number; onSelect: (t: BoardTab) => void }) {
+function StatusLink({ status, href, active, count, onSelect }: { status: BoardStatus; href: string; active: boolean; count: number; onSelect: (s: BoardStatus) => void }) {
   const onClick = (event: MouseEvent<HTMLAnchorElement>) => {
-    // Plain left clicks switch in place; modified clicks (new tab, new window) keep the browser's default.
-    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (!isPlainClick(event)) return;
+    event.preventDefault();
+    onSelect(status);
+  };
+  return (
+    <a href={href} onClick={onClick} data-testid={`status-${status}`} aria-current={active ? 'page' : undefined} className={active ? STATUS_ACTIVE : STATUS_INACTIVE}>
+      <span>{STATUS_LABELS[status]}</span>
+      <span data-testid={`status-${status}-count`} className="text-body-base font-medium text-pk-content-secondary tabular-nums">
+        {count}
+      </span>
+    </a>
+  );
+}
+
+function Tab({ id, href, won, active, icon, label, count, onSelect }: { id: BoardTab; href: string; won: boolean; active: boolean; icon?: ReactNode; label: string; count: number; onSelect: (t: BoardTab) => void }) {
+  const onClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (!isPlainClick(event)) return;
     event.preventDefault();
     onSelect(id);
   };
   return (
-    <a href={tabHref(id)} onClick={onClick} data-tab={id} aria-current={active ? 'page' : undefined} className={active ? TAB_ACTIVE : TAB_INACTIVE}>
+    <a href={href} onClick={onClick} data-tab={id} aria-current={active ? 'page' : undefined} className={active ? TAB_ACTIVE : TAB_INACTIVE}>
       {icon}
       <span>{label}</span>
-      <span className="text-body-xs font-medium text-pk-content-secondary tabular-nums" aria-label={`${count} open`}>
+      <span className="text-body-xs font-medium text-pk-content-secondary tabular-nums" aria-label={`${count} ${won ? 'won' : 'open'}`}>
         {count}
       </span>
     </a>
@@ -160,13 +190,20 @@ function Tab({ id, active, icon, label, count, onSelect }: { id: BoardTab; activ
 
 export function SiteHeader({
   bounties,
+  status,
+  onStatusChange,
   tab,
   onTabChange,
   query,
   onQueryChange,
   profileActive = false,
 }: {
+  /** Every bounty, open and won: each mode counts its own. */
   bounties: BoardBounty[];
+  /** The board's mode: the rail shows its tabs and counts. */
+  status: BoardStatus;
+  onStatusChange: (s: BoardStatus) => void;
+  /** The current tab on the board; null on /profile and /bounty/*, where no tab and neither switch side is current. */
   tab: BoardTab | null;
   onTabChange: (t: BoardTab) => void;
   /** The board search, owned by App; typing here filters the grid live. */
@@ -183,8 +220,10 @@ export function SiteHeader({
   const [canScrollRight, setCanScrollRight] = useState(false);
   const [now] = useState(() => Date.now());
 
-  /** Open listings per tab (deadline still ahead at page load). */
-  const counts = useMemo(() => tabCounts(bounties, now), [bounties, now]);
+  /** Listings per tab in the current mode (open or ended as of page load), and per mode for the switch. */
+  const counts = useMemo(() => tabCounts(bounties, now, status), [bounties, now, status]);
+  const modeCounts = useMemo(() => statusCounts(bounties, now), [bounties, now]);
+  const onBoard = tab !== null;
 
   // "/" focuses search (desktop field, or opens the compact one below lg); Escape blurs it. Ignored while typing elsewhere.
   useEffect(() => {
@@ -281,15 +320,34 @@ export function SiteHeader({
         </div>
       )}
 
-      {/* Row 2: the category rail (lg and up). */}
+      {/*
+        Row 2: the Live / Won switch, at every width. Aligned to the rail: the same container, and from lg the labels start where
+        the rail's tab labels do (the rail tabs' 10px side padding). Off the board neither side is current and each opens that mode.
+      */}
+      <div role="navigation" aria-label="Bounty status" data-testid="status-switch" className="mx-auto w-full max-w-[1350px] px-4 lg:px-6">
+        <div className="flex h-12 items-stretch gap-6 lg:px-2.5">
+          {(['live', 'won'] as const).map((s) => (
+            <StatusLink
+              key={s}
+              status={s}
+              href={tabHref(s, onBoard && tabsFor(s).some((t) => t.id === tab) ? tab : DEFAULT_TAB)}
+              active={onBoard && status === s}
+              count={modeCounts[s]}
+              onSelect={onStatusChange}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Row 3: the category rail (lg and up). */}
       <nav aria-label="Bounty tabs" className="mx-auto hidden w-full max-w-[1350px] px-6 lg:flex">
         <div className="relative w-full min-w-0">
           <div ref={railRef} className={`no-scrollbar flex h-12 w-full min-w-0 snap-x snap-mandatory items-center overflow-x-auto scroll-px-3 ${railMask}`}>
             <div className="flex h-full w-max min-w-full items-center pr-10">
-              {BOARD_TABS.map(({ id, label }) => (
+              {tabsFor(status).map(({ id, label }) => (
                 <Fragment key={id}>
-                  <Tab id={id} label={label} count={counts[id]} active={tab === id} icon={id === 'trending' ? <TrendingIcon /> : undefined} onSelect={onTabChange} />
-                  {id === 'ending' && <span aria-hidden="true" className="mx-2 h-3.5 w-px shrink-0 bg-pk-gray-300" />}
+                  {id === BOUNTY_CATEGORIES[0] && <span aria-hidden="true" className="mx-2 h-3.5 w-px shrink-0 bg-pk-gray-300" />}
+                  <Tab id={id} href={tabHref(status, id)} won={status === 'won'} label={label} count={counts[id] ?? 0} active={tab === id} icon={id === 'trending' ? <TrendingIcon /> : undefined} onSelect={onTabChange} />
                 </Fragment>
               ))}
             </div>

@@ -1,5 +1,5 @@
 import { byRewardDesc, type BoardBounty } from './bounty';
-import type { BoardTab } from './boardTabs';
+import type { BoardStatus, BoardTab } from './boardTabs';
 
 /**
  * The board's filter bar: a sort dropdown, two filter dropdowns (minimum reward, deadline window) and a
@@ -129,6 +129,26 @@ export const SORT_OPTIONS: readonly { value: BoardSort; label: string }[] = [
 
 export const isBoardSort = (s: string | null | undefined): s is BoardSort => SORT_OPTIONS.some((o) => o.value === s);
 
+/**
+ * Won mode's sort choices: nothing is live, so no 24h activity, no publish order and no time left. The two deadline sorts
+ * stay, renamed for bounties that are over: `time-left` (latest deadline first) is "Recently won", `ending` is "Won longest ago".
+ */
+export const WON_SORT_OPTIONS: readonly { value: BoardSort; label: string }[] = [
+  { value: 'reward', label: 'Highest reward' },
+  { value: 'lowest', label: 'Lowest reward' },
+  { value: 'prize', label: 'Biggest first prize' },
+  { value: 'submissions', label: 'Most submissions' },
+  { value: 'fewest', label: 'Fewest submissions' },
+  { value: 'time-left', label: 'Recently won' },
+  { value: 'ending', label: 'Won longest ago' },
+];
+
+/** The sort dropdown's choices for a board mode (Live keeps every sort). */
+export const sortOptionsFor = (status: BoardStatus = 'live'): readonly { value: BoardSort; label: string }[] => (status === 'won' ? WON_SORT_OPTIONS : SORT_OPTIONS);
+
+/** True when `s` is a sort the mode offers (a `?sort=active` link opened in Won mode falls back to the tab's own order). */
+export const isSortFor = (status: BoardStatus, s: string | null | undefined): s is BoardSort => sortOptionsFor(status).some((o) => o.value === s);
+
 /** First place's prize: the largest placement, or the whole reward when the bounty has one winner. */
 export const topPrize = (b: BoardBounty): number => Math.max(0, ...Object.values(b.rewards ?? {})) || b.rewardAmount;
 
@@ -180,8 +200,9 @@ export function sortBounties<T extends BoardBounty>(list: readonly T[], sort: Bo
   return [...list].sort((a, b) => primary(a, b) || byRewardDesc(a, b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
-/** The sort a header tab starts with: the order `selectBounties` gives that tab. */
-export function tabDefaultSort(tab: BoardTab): BoardSort {
+/** The sort a header tab starts with: the order `selectBounties` gives that tab in that mode. Won's "Recently won" is `time-left`. */
+export function tabDefaultSort(tab: BoardTab, status: BoardStatus = 'live'): BoardSort {
+  if (status === 'won') return tab === 'new' ? 'time-left' : 'reward';
   switch (tab) {
     case 'new':
       return 'newest';

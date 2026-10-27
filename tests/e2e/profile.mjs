@@ -124,7 +124,10 @@ ok('every won row shows its final rank and payout', wonRows.every((r) => /#\d+ o
 const paidSum = wonRows.reduce((s, r) => s + Number((r.text.match(/\+\$([\d,]+)/)?.[1] ?? '0').replace(/,/g, '')), 0);
 const earned = Number((await tid('profile-total-earned').innerText()).replace(/[^\d]/g, ''));
 ok('won payouts add up to Total earned', paidSum === earned, `${paidSum} vs ${earned}`);
-ok('past wins show medals, not memes', (await p.$$eval('[data-testid=profile-won-row]:not([data-slug]) img', (i) => i.length)) === 0);
+const medalRows = await p.$$eval('[data-testid=profile-won-row][data-tile=medal]', (rows) => rows.map((r) => r.querySelectorAll('img').length));
+ok('past wins show medals, not memes', medalRows.length >= 4 && medalRows.every((n) => n === 0), `${medalRows.length} medal rows`);
+const wonLinks = await p.$$eval('[data-testid=profile-won-row] a[href*="/bounty/"]', (as) => as.length);
+ok('every won row links to its bounty page', wonLinks === wonRows.length, `${wonLinks} links`);
 await p.screenshot({ path: `${OUT}/profile-won.png`, fullPage: true });
 
 // activity

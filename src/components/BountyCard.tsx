@@ -1,6 +1,7 @@
 import { useId } from 'react';
-import { formatBountyAmount, formatEndedOn, type Bounty } from '../lib/bounty';
+import { formatBountyAmount, formatEndedOn, type BoardBounty, type Bounty } from '../lib/bounty';
 import { formatCountdown, isExpired, isUrgent, useCountdown } from '../lib/countdown';
+import { useWinners } from '../lib/profile';
 import { BountyIcon } from './BountyIcon';
 import { BookmarkButton, CARD_SHELL } from './MarketCard';
 
@@ -57,11 +58,55 @@ export function RollingTime({ text, deadline, labelId, urgent }: { text: string;
 
 const LABEL = 'text-body-xs font-semibold! text-pk-content-secondary whitespace-nowrap';
 
+const ENDED_DAY = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
+const ENDED_DAY_YEAR = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+/** The footer's end date: "Oct 7", with the year only when it is not this year's. */
+const formatEndedDay = (iso: string): string => {
+  const d = new Date(iso);
+  return (d.getFullYear() === new Date().getFullYear() ? ENDED_DAY : ENDED_DAY_YEAR).format(d);
+};
+
+/** A board listing (it has a slug and a leaderboard), as opposed to the replica's bare sample card. */
+const isBoardBounty = (b: Bounty): b is BoardBounty => 'slug' in b && 'submissions' in b;
+
+/** The countdown row of an ended board bounty: who took first place, "(you)" when it was you. Falls back to the end date. */
+function WinnerRow({ bounty, labelId }: { bounty: BoardBounty; labelId: string }) {
+  const winner = useWinners(bounty)[0];
+  if (!winner) return <EndedRow deadline={bounty.deadline} labelId={labelId} />;
+  return (
+    <>
+      <span id={labelId} className={`${LABEL} min-w-0`}>
+        Won by
+      </span>
+      <p data-testid="bounty-winner" aria-labelledby={labelId} className="min-w-0 truncate text-heading-xl text-pk-content-primary">
+        @{winner.hunter}
+        {winner.you && <span className="text-pk-content-secondary"> (you)</span>}
+      </p>
+    </>
+  );
+}
+
+function EndedRow({ deadline, labelId }: { deadline: string; labelId: string }) {
+  return (
+    <>
+      <span id={labelId} className={`${LABEL} min-w-0`}>
+        Ended
+      </span>
+      <time dateTime={deadline} className="text-heading-xl tabular-nums text-pk-content-secondary whitespace-pre">
+        {formatEndedOn(deadline)}
+      </time>
+    </>
+  );
+}
+
 export function BountyCard({ bounty }: { bounty: Bounty }) {
   const labelId = useId();
   const remaining = useCountdown(bounty.deadline);
   const expired = isExpired(remaining);
   const count = bounty.submissionCount;
+  /** An ended board listing is a won bounty: the winner replaces the countdown and the footer says when it ended. */
+  const won = expired && isBoardBounty(bounty);
+  const submissions = count === undefined ? null : `${count} ${count === 1 ? 'submission' : 'submissions'}`;
   return (
     <div className={CARD_SHELL} data-testid="bounty-card">
       <div className="flex w-full items-start gap-2 px-3 h-[42px] static">
@@ -87,15 +132,19 @@ export function BountyCard({ bounty }: { bounty: Bounty }) {
       <div className="flex flex-col justify-end gap-1.5 px-3 pb-2">
         <div className="relative h-20 w-full lg:mt-0.5">
           <div className="flex justify-between items-center gap-4 w-full shrink-0 min-h-10">
-            <span id={labelId} className={`${LABEL} min-w-0`}>
-              {expired ? 'Ended' : 'Ends in'}
-            </span>
             {expired ? (
-              <time dateTime={bounty.deadline} className="text-heading-xl tabular-nums text-pk-content-secondary whitespace-pre">
-                {formatEndedOn(bounty.deadline)}
-              </time>
+              won ? (
+                <WinnerRow bounty={bounty} labelId={labelId} />
+              ) : (
+                <EndedRow deadline={bounty.deadline} labelId={labelId} />
+              )
             ) : (
-              <RollingTime text={formatCountdown(remaining)} deadline={bounty.deadline} labelId={labelId} urgent={isUrgent(remaining)} />
+              <>
+                <span id={labelId} className={`${LABEL} min-w-0`}>
+                  Ends in
+                </span>
+                <RollingTime text={formatCountdown(remaining)} deadline={bounty.deadline} labelId={labelId} urgent={isUrgent(remaining)} />
+              </>
             )}
           </div>
           <div className="flex justify-between items-center gap-4 w-full shrink-0 min-h-10">
@@ -106,7 +155,18 @@ export function BountyCard({ bounty }: { bounty: Bounty }) {
         <div className="flex w-full text-body-sm text-pk-content-secondary relative items-center">
           <div className="flex gap-2 justify-between items-center w-full overflow-x-auto whitespace-nowrap overflow-visible no-scrollbar">
             <div className="flex flex-row gap-1 items-center min-w-0">
-              {count === undefined ? null : <p className="truncate">{`${count} ${count === 1 ? 'submission' : 'submissions'}`}</p>}
+              {won ? (
+                <>
+                  {submissions && <p className="shrink-0">{submissions}</p>}
+                  {/* The rail's own divider between the two facts (a middle dot is a named meta-string tell). */}
+                  {submissions && <span aria-hidden="true" className="mx-1 h-3.5 w-px shrink-0 bg-pk-gray-300" />}
+                  <p className="truncate">
+                    Ended <time dateTime={bounty.deadline}>{formatEndedDay(bounty.deadline)}</time>
+                  </p>
+                </>
+              ) : (
+                submissions && <p className="truncate">{submissions}</p>
+              )}
             </div>
             <div className="flex justify-center items-center">
               <div className="flex">

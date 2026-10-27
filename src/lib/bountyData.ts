@@ -11,7 +11,9 @@ export const BOARD_DATA_VERSION = 'competitive-1';
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
-const LOAD = Date.now();
+/** The instant the board is built at; won bounties (wonBounties.ts) place their deadlines on the same clock. */
+export const BOARD_LOAD = Date.now();
+const LOAD = BOARD_LOAD;
 
 // ---------- deterministic PRNG ----------
 function fnv1a(s: string): number {

@@ -30,8 +30,10 @@ ok('30 bounty cards on home', cards === 30, String(cards));
 ok('no hero / rail / chips', !(await p.$('[data-testid=featured-bounty]')) && !(await p.$('[data-testid=bounty-rail]')) && !(await p.getByText('All bounties', { exact: true }).count()));
 const rewards = await p.$$eval('[data-reward]', (els) => els.map((e) => Number(e.getAttribute('data-reward'))));
 ok('Trending sorted by reward desc', rewards.every((r, i) => i === 0 || rewards[i - 1] >= r), rewards.slice(0, 5).join(','));
+// Measured from the header's bottom: the header grew a row (the Live / Won switch), the grid must still follow it directly.
 const firstTop = await p.$eval('[data-testid=bounty-card]', (c) => c.getBoundingClientRect().top);
-ok('grid sits at the top under the header', firstTop < 200, `first card top ${Math.round(firstTop)}px`);
+const headerBottom = await p.$eval('[data-testid=site-header]', (h) => h.getBoundingClientRect().bottom);
+ok('grid sits at the top under the header', firstTop - headerBottom < 80, `first card top ${Math.round(firstTop)}px, ${Math.round(firstTop - headerBottom)}px under the header`);
 await p.waitForTimeout(800);
 const icons = await p.$$eval('[data-testid=bounty-icon] img', (imgs) => imgs.map((i) => ({ src: i.currentSrc || i.src, ok: i.complete && i.naturalWidth > 0 })));
 ok('every card icon loaded', icons.length === 30 && icons.every((i) => i.ok), `${icons.filter((i) => i.ok).length}/${icons.length}`);
@@ -144,6 +146,67 @@ await p2.close();
   await pf.evaluate(() => { localStorage.removeItem('agent-fun:entries:v1'); });
   await pf.close();
 }
+// Live bounties / Won bounties switch: above the rail, Live by default, Won lists every previously won bounty
+{
+  const ps = await ctx.newPage(); const se = []; ps.on('pageerror', (e) => se.push(String(e))); ps.on('console', (m) => m.type() === 'error' && se.push(m.text()));
+  await ps.goto(BASE, { waitUntil: 'networkidle' });
+  const live = ps.getByTestId('status-live'), won = ps.getByTestId('status-won');
+  const nCards = () => ps.$$eval('[data-testid=bounty-card]', (c) => c.length);
+  ok('switch: default is Live (30 cards)', (await live.getAttribute('aria-current')) === 'page' && (await won.getAttribute('aria-current')) === null && (await nCards()) === 30, `${await nCards()} cards`);
+  const geo = await ps.evaluate(() => {
+    const sw = document.querySelector('[data-testid=status-switch]').getBoundingClientRect();
+    const rail = document.querySelector('nav[aria-label="Bounty tabs"]').getBoundingClientRect();
+    const sel = document.querySelector('[data-testid=status-switch] a[aria-current=page]');
+    const after = getComputedStyle(sel, '::after');
+    const tab = document.querySelector('nav[aria-label="Bounty tabs"] a');
+    return { swBottom: sw.bottom, railTop: rail.top, afterH: parseFloat(after.height), afterW: parseFloat(after.width), labelW: sel.getBoundingClientRect().width, font: parseFloat(getComputedStyle(sel).fontSize), tabFont: parseFloat(getComputedStyle(tab).fontSize) };
+  });
+  ok('switch sits above the category rail', geo.swBottom <= geo.railTop + 0.5, `switch bottom ${geo.swBottom}, rail top ${geo.railTop}`);
+  ok('selected switch underline is >= 3px and the label\'s full width', geo.afterH >= 3 && Math.abs(geo.afterW - geo.labelW) < 0.5, `${geo.afterH}px x ${geo.afterW} / label ${geo.labelW}`);
+  ok('switch labels are larger than the rail tabs', geo.font > geo.tabFont, `${geo.font}px vs ${geo.tabFont}px`);
+  await ps.screenshot({ path: `${OUT}/switch-1440.png`, clip: { x: 0, y: 0, width: 1440, height: 200 } });
+
+  await won.click();
+  await ps.waitForTimeout(500);
+  ok('Won: URL has status=won and Won is current', new URL(ps.url()).searchParams.get('status') === 'won' && (await won.getAttribute('aria-current')) === 'page' && (await live.getAttribute('aria-current')) === null, new URL(ps.url()).search);
+  const wonCards = await ps.$$eval('#all-bounties ul > li', (lis) => lis.map((li) => ({ status: li.getAttribute('data-status'), winner: !!li.querySelector('[data-testid=bounty-winner]') })));
+  ok('Won: every card is a won card with a winner', wonCards.length > 0 && wonCards.every((c) => c.status === 'won' && c.winner), `${wonCards.filter((c) => c.status === 'won' && c.winner).length}/${wonCards.length}`);
+  const badge = Number(await ps.getByTestId('status-won-count').innerText());
+  ok('Won: card count equals the Won count (18)', wonCards.length === badge && badge === 18, `${wonCards.length} cards, badge ${badge}`);
+  await ps.waitForTimeout(800);
+  const wonIcons = await ps.$$eval('[data-testid=bounty-icon] img', (imgs) => imgs.map((i) => i.currentSrc || i.src));
+  ok('Won: every meme is distinct', wonIcons.length === wonCards.length && new Set(wonIcons).size === wonIcons.length, `${new Set(wonIcons).size}/${wonIcons.length} distinct`);
+  const railText = await ps.$eval('nav[aria-label="Bounty tabs"]', (n) => n.innerText);
+  ok('Won: rail has Recently won and no Ending soon', /Recently won/.test(railText) && !/Ending soon/.test(railText), railText.replace(/\s+/g, ' '));
+  const tradingCount = await ps.$eval('nav[aria-label="Bounty tabs"] a[data-tab=Trading]', (a) => a.innerText.replace(/\D+/g, ''));
+  ok('Won: Trading tab shows 3', tradingCount === '3', tradingCount);
+  const footer = await ps.$eval('#all-bounties ul > li', (li) => li.innerText.replace(/\s+/g, ' '));
+  ok('Won: card reads Won by @handle and Ended <date>', /Won by @\w+/.test(footer) && /submissions?\s+Ended [A-Z][a-z]{2} \d{1,2}/.test(footer), footer);
+  ok('Won: document title', (await ps.title()) === 'Won bounties | agent.fun', await ps.title());
+  await ps.locator('#all-bounties button[aria-label^="Filter bounties"]').click();
+  await ps.waitForTimeout(350);
+  ok('Won: filter bar has sort and reward but no deadline menu', (await ps.locator('[data-testid=filter-ends]').count()) === 0 && (await ps.locator('[data-testid=filter-sort]').count()) === 1 && (await ps.locator('[data-testid=filter-reward]').count()) === 1);
+  await ps.screenshot({ path: `${OUT}/won-grid.png` });
+  await ps.locator('#all-bounties button[aria-label^="Filter bounties"]').click();
+  await ps.locator('nav[aria-label="Bounty tabs"] a[data-tab=Trading]').click();
+  await ps.waitForTimeout(400);
+  ok('Won: Trading tab keeps status=won and lists 3', new URL(ps.url()).searchParams.get('status') === 'won' && (await nCards()) === 3, new URL(ps.url()).search);
+  await ps.locator('nav[aria-label="Bounty tabs"] a[data-tab=trending]').click();
+  await ps.waitForTimeout(300);
+
+  const wonHref = await ps.$eval('[data-testid=bounty-card] a', (a) => a.getAttribute('href'));
+  await ps.locator('[data-testid=bounty-card] a').first().click();
+  const opened = await ps.waitForSelector('[data-testid=bounty-page]', { timeout: 5000 }).then(() => true, () => false);
+  ok('Won: a won card opens its bounty page', opened && /\/bounty\//.test(ps.url()) && new URL(ps.url()).pathname.endsWith(wonHref.replace(/^.*\/bounty\//, '/bounty/')), new URL(ps.url()).pathname);
+  ok('Won: neither switch side is current on a bounty page', (await ps.locator('[data-testid=status-switch] [aria-current=page]').count()) === 0);
+
+  await ps.goto(new URL('?status=won', BASE).href, { waitUntil: 'networkidle' });
+  await ps.getByTestId('status-live').click();
+  await ps.waitForTimeout(400);
+  ok('back to Live: 30 cards, no status param', (await nCards()) === 30 && !new URL(ps.url()).searchParams.has('status') && (await ps.getByTestId('status-live').getAttribute('aria-current')) === 'page', `${await nCards()} cards`);
+  ok('switch flow has no page errors', se.length === 0, se.slice(0, 2).join(' | '));
+  await ps.close();
+}
 // reduced motion
 const rm = await b.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' }); const p3 = await rm.newPage();
 await p3.goto(BASE, { waitUntil: 'networkidle' }); await p3.waitForTimeout(500);
@@ -156,6 +219,9 @@ await pm.goto(BASE, { waitUntil: 'networkidle' });
 const overflow = await pm.evaluate(() => document.documentElement.scrollWidth - innerWidth);
 ok('mobile: no horizontal overflow', overflow <= 1, `${overflow}px`);
 await pm.screenshot({ path: `${OUT}/mobile.png` });
+const swm = await pm.evaluate(() => { const el = document.querySelector('[data-testid=status-switch]'); const r = el.getBoundingClientRect(); const live = document.querySelector('[data-testid=status-live]').getBoundingClientRect(); const won = document.querySelector('[data-testid=status-won]').getBoundingClientRect(); return { visible: r.height > 0 && getComputedStyle(el).display !== 'none', inView: live.left >= 0 && won.right <= innerWidth }; });
+ok('390px: Live / Won switch is visible and fits', swm.visible && swm.inView, JSON.stringify(swm));
+await pm.screenshot({ path: `${OUT}/switch-390.png`, clip: { x: 0, y: 0, width: 390, height: 160 } });
 await m.close();
 ok('no console/page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 ok('no failed requests', failed.length === 0, failed.slice(0, 3).join(' | '));

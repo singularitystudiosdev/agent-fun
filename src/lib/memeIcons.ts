@@ -3,13 +3,15 @@ import { MEME_EXTRA_A } from './memeExtraA';
 import { MEME_EXTRA_B } from './memeExtraB';
 import { MEME_EXTRA_C } from './memeExtraC';
 import { MEME_EXTRA_D } from './memeExtraD';
+import { MEME_EXTRA_E } from './memeExtraE';
 
 /**
  * Every bounty's icon is the popular, caption-free meme whose joke matches its task (the way the empty wallet matches
  * "redesign the onboarding for our mobile wallet"). Templates are the real Imgflip blank templates, pulled and
  * square-cropped by scripts/fetch-memes.mjs into src/assets/memes/<template>/ (meme.webp 192x192, still.png, meta.json).
  *
- * Resolution order: MEME_EXTRA_A..D (sibling-owned explicit picks, one per listing slug) -> keyword match over title,
+ * Resolution order: MEME_EXTRA_A..D (explicit picks, one per live listing slug) -> MEME_EXTRA_E (the won bounties,
+ * all templates no live listing shows) -> keyword match over title,
  * skills and description (competition themes first: cheapest, fastest, forecast, accuracy, trading, security, games)
  * -> the listing's category -> the empty wallet.
  */
@@ -198,6 +200,55 @@ export const MEME_TEMPLATES = {
     src: new URL('../assets/memes/trade-offer/meme.webp', import.meta.url).href,
     source: IMGFLIP(309868304, 'Trade-Offer'),
   },
+  // Pulled for the won bounties (MEME_EXTRA_E); not in the keyword rules.
+  'e-mine-mine-mine-seagulls': {
+    slug: 'e-mine-mine-mine-seagulls',
+    template: "Finding Nemo Seagulls 'Mine'",
+    src: new URL('../assets/memes/e-mine-mine-mine-seagulls/meme.webp', import.meta.url).href,
+    still: new URL('../assets/memes/e-mine-mine-mine-seagulls/still.png', import.meta.url).href,
+    source: IMGFLIP(258086470, 'Mine-Mine-Mine'),
+  },
+  'e-sweating-jordan-peele': {
+    slug: 'e-sweating-jordan-peele',
+    template: 'Sweating Jordan Peele',
+    src: new URL('../assets/memes/e-sweating-jordan-peele/meme.webp', import.meta.url).href,
+    still: new URL('../assets/memes/e-sweating-jordan-peele/still.png', import.meta.url).href,
+    source: IMGFLIP(210959447, 'Sweating-Jordan-Peele'),
+  },
+  'e-palpatine-unlimited-power': {
+    slug: 'e-palpatine-unlimited-power',
+    template: "Palpatine 'Unlimited Power'",
+    src: new URL('../assets/memes/e-palpatine-unlimited-power/meme.webp', import.meta.url).href,
+    still: new URL('../assets/memes/e-palpatine-unlimited-power/still.png', import.meta.url).href,
+    source: IMGFLIP(452498147, 'Palpatine---Unlimited-Power'),
+  },
+  'e-thanos-perfectly-balanced': {
+    slug: 'e-thanos-perfectly-balanced',
+    template: "Thanos 'Perfectly Balanced'",
+    src: new URL('../assets/memes/e-thanos-perfectly-balanced/meme.webp', import.meta.url).href,
+    source: IMGFLIP(224679348, 'thanos-perfectly-balanced-as-all-things-should-be-meme-template'),
+  },
+  'e-rick-roll': {
+    slug: 'e-rick-roll',
+    template: 'Rick Roll (Rick Astley)',
+    src: new URL('../assets/memes/e-rick-roll/meme.webp', import.meta.url).href,
+    still: new URL('../assets/memes/e-rick-roll/still.png', import.meta.url).href,
+    source: IMGFLIP(266673813, 'Rick-Roll-Rick-Astley'),
+  },
+  'e-vegeta-over-9000': {
+    slug: 'e-vegeta-over-9000',
+    template: "Vegeta 'It's Over 9000'",
+    src: new URL('../assets/memes/e-vegeta-over-9000/meme.webp', import.meta.url).href,
+    still: new URL('../assets/memes/e-vegeta-over-9000/still.png', import.meta.url).href,
+    source: IMGFLIP(303884769, 'ITS-OVER-9000'),
+  },
+  'e-forrest-gump-running': {
+    slug: 'e-forrest-gump-running',
+    template: 'Forrest Gump Running',
+    src: new URL('../assets/memes/e-forrest-gump-running/meme.webp', import.meta.url).href,
+    still: new URL('../assets/memes/e-forrest-gump-running/still.png', import.meta.url).href,
+    source: IMGFLIP(381123758, 'Forest-Gump-Running'),
+  },
 } as const satisfies Record<string, TemplateDef>;
 
 export type MemeSlug = keyof typeof MEME_TEMPLATES;
@@ -268,7 +319,8 @@ export function memeFor(bounty?: Bounty): MemeIcon {
   if (!bounty) return pick('empty-wallet', 'Default: the empty wallet.');
   const b = bounty as MaybeBoard;
   if (b.slug) {
-    const explicit = MEME_EXTRA_A[b.slug] ?? MEME_EXTRA_B[b.slug] ?? MEME_EXTRA_C[b.slug] ?? MEME_EXTRA_D[b.slug];
+    const explicit =
+      MEME_EXTRA_A[b.slug] ?? MEME_EXTRA_B[b.slug] ?? MEME_EXTRA_C[b.slug] ?? MEME_EXTRA_D[b.slug] ?? MEME_EXTRA_E[b.slug];
     if (explicit) return explicit;
   }
   const byKeyword = keywordMeme(b);

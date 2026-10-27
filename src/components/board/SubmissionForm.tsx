@@ -263,6 +263,26 @@ export function SubmissionForm({ bounty, onSubmitted, scrollMargin }: Submission
   const summaryLen = values.summary.trim().length;
   const metric = spec.metric;
 
+  // Closed: one heading and one sentence, no fields and no action (a receipt from just before the close stays).
+  if (ended && !receipt)
+    return (
+      <section
+        id="submit"
+        data-testid="submission-form"
+        data-state="closed"
+        aria-labelledby={titleId}
+        style={scrollMargin ? { scrollMarginTop: scrollMargin } : undefined}
+        className="flex flex-col gap-1 rounded-xl border border-pk-border bg-pk-elevated px-5 py-4"
+      >
+        <h2 id={titleId} className="text-body-base font-semibold text-pk-content-primary">
+          Entries closed
+        </h2>
+        <p className="text-body-base text-pk-content-secondary text-pretty" data-testid="submission-closed">
+          This bounty stopped taking entries on {formatEndedOn(bounty.deadline)}.
+        </p>
+      </section>
+    );
+
   return (
     <section
       id="submit"
@@ -276,13 +296,7 @@ export function SubmissionForm({ bounty, onSubmitted, scrollMargin }: Submission
           Submit an entry
         </h2>
         {!receipt && (
-          <p className="text-body-base text-pk-content-secondary text-pretty">
-            {ended ? (
-              <span data-testid="submission-closed">Submissions closed on {formatEndedOn(bounty.deadline)}.</span>
-            ) : (
-              'Your entry joins Live submissions as pending until the verifier scores it.'
-            )}
-          </p>
+          <p className="text-body-base text-pk-content-secondary text-pretty">Your entry joins Live submissions as pending until the verifier scores it.</p>
         )}
       </header>
 
@@ -290,7 +304,7 @@ export function SubmissionForm({ bounty, onSubmitted, scrollMargin }: Submission
         <Receipt receipt={receipt} bounty={bounty} saved={saved} headingRef={receiptRef} onAnother={submitAnother} />
       ) : (
         <form ref={formRef} noValidate onSubmit={onSubmit} aria-labelledby={titleId} data-testid="submission-form-fields">
-          <fieldset disabled={ended} className="min-w-0 disabled:opacity-60">
+          <fieldset className="min-w-0">
             {/* 1. Entrant */}
             <Section id={dom('s1')} n={1} title="Entrant">
               <div className="grid gap-4 sm:grid-cols-2">
@@ -509,9 +523,7 @@ export function SubmissionForm({ bounty, onSubmitted, scrollMargin }: Submission
 
             <div className="flex flex-col-reverse gap-3 border-t border-pk-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-body-sm text-pk-content-secondary text-pretty" role="status" data-testid="submission-status">
-                {ended ? (
-                  'This bounty is no longer taking entries.'
-                ) : errorCount > 0 ? (
+                {errorCount > 0 ? (
                   <span className="font-semibold text-pk-red-500">{errorCount === 1 ? '1 field needs attention.' : `${errorCount} fields need attention.`}</span>
                 ) : metric ? (
                   `Ranked by ${metric.name}, ${metric.better} is better.`

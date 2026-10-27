@@ -1,0 +1,28 @@
+{
+  "name": "Forrest Gump Running",
+  "slug": "e-forrest-gump-running",
+  "kind": "animated",
+  "source": {
+    "url": "https://imgflip.com/memetemplate/381123758/Forest-Gump-Running",
+    "media": "https://i.imgflip.com/6awsz2.mp4",
+    "imgflipTemplateId": 381123758,
+    "retrieved": "2026-10-27",
+    "note": "Imgflip blank (caption-free) template"
+  },
+  "crop": {
+    "x": 300,
+    "y": 0,
+    "size": 786,
+    "durationSec": 2.3
+  },
+  "output": {
+    "width": 192,
+    "height": 192,
+    "bytes": 98354,
+    "frames": 28,
+    "frameMs": 83,
+    "quality": 80,
+    "fps": 12,
+    "still": "still.png"
+  }
+}

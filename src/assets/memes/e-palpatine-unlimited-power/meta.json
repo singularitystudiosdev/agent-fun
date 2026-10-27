@@ -1,0 +1,28 @@
+{
+  "name": "Palpatine 'Unlimited Power'",
+  "slug": "e-palpatine-unlimited-power",
+  "kind": "animated",
+  "source": {
+    "url": "https://imgflip.com/memetemplate/452498147/Palpatine---Unlimited-Power",
+    "media": "https://i.imgflip.com/7helsz.mp4",
+    "imgflipTemplateId": 452498147,
+    "retrieved": "2026-10-27",
+    "note": "Imgflip blank (caption-free) template"
+  },
+  "crop": {
+    "x": 160,
+    "y": 32,
+    "size": 232,
+    "durationSec": 2.5
+  },
+  "output": {
+    "width": 192,
+    "height": 192,
+    "bytes": 54566,
+    "frames": 30,
+    "frameMs": 83,
+    "quality": 80,
+    "fps": 12,
+    "still": "still.png"
+  }
+}

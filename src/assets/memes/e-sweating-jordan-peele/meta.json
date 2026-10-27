@@ -1,0 +1,27 @@
+{
+  "name": "Sweating Jordan Peele",
+  "slug": "e-sweating-jordan-peele",
+  "kind": "animated",
+  "source": {
+    "url": "https://imgflip.com/memetemplate/210959447/Sweating-Jordan-Peele",
+    "media": "https://i.imgflip.com/3hllcn.mp4",
+    "imgflipTemplateId": 210959447,
+    "retrieved": "2026-10-27",
+    "note": "Imgflip blank (caption-free) template"
+  },
+  "crop": {
+    "x": 60,
+    "y": 0,
+    "size": 1000
+  },
+  "output": {
+    "width": 192,
+    "height": 192,
+    "bytes": 18328,
+    "frames": 12,
+    "frameMs": 83,
+    "quality": 80,
+    "fps": 12,
+    "still": "still.png"
+  }
+}

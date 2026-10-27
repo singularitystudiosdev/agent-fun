@@ -8,12 +8,14 @@ import {
   minRewardLabel,
   parseRewardInput,
   queryTerms,
-  SORT_OPTIONS,
+  sortOptionsFor,
   type BoardSort,
   type MinReward,
   type PanelFilters,
 } from '../../lib/boardFilters';
+import type { BoardStatus } from '../../lib/boardTabs';
 import type { BoardBounty } from '../../lib/bounty';
+import { isEnded } from '../../lib/wonBounties';
 import { BountyCard } from '../BountyCard';
 import { SelectMenu, type SelectMenuCustom } from './SelectMenu';
 
@@ -46,7 +48,7 @@ const BountyGrid = memo(function BountyGrid({ bounties }: { bounties: BoardBount
   return (
     <ul role="list" aria-label="Bounties" className="grid h-auto gap-3 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {bounties.map((b) => (
-        <li key={b.id} className="relative h-[180px]" data-reward={b.rewardAmount} data-category={b.category}>
+        <li key={b.id} className="relative h-[180px]" data-reward={b.rewardAmount} data-category={b.category} data-status={isEnded(b) ? 'won' : 'live'}>
           <Card bounty={b} />
         </li>
       ))}
@@ -241,7 +243,11 @@ const SORT_ICONS: Record<BoardSort, ReactNode> = {
   ending: <DottedClockIcon />,
   'time-left': <ClockIcon />,
 };
-const SORT_MENU_OPTIONS = SORT_OPTIONS.map((o) => ({ ...o, icon: SORT_ICONS[o.value] }));
+/** Each mode's sort menu (Won drops the live-only orders and renames the deadline ones), with polymarket's icons. */
+const SORT_MENU_OPTIONS: Record<BoardStatus, { value: BoardSort; label: string; icon: ReactNode }[]> = {
+  live: sortOptionsFor('live').map((o) => ({ ...o, icon: SORT_ICONS[o.value] })),
+  won: sortOptionsFor('won').map((o) => ({ ...o, icon: SORT_ICONS[o.value] })),
+};
 
 /** The reward dropdown's typed minimum: "7500", "7,500", "7.5k" all read as $7,500+. */
 const REWARD_CUSTOM: SelectMenuCustom<MinReward> = {
@@ -284,6 +290,7 @@ function FilterCheckbox({ label, checked, onChange, testId }: { label: string; c
 }
 
 export function AllBounties({
+  status = 'live',
   bounties,
   total,
   onShowAll,
@@ -296,6 +303,8 @@ export function AllBounties({
   sort,
   onSortChange,
 }: {
+  /** The board's mode. Won hides the deadline menu (nothing is ending) and offers Won's sorts. */
+  status?: BoardStatus;
   /** The tab's bounties after the toolbar's refinements, in display order. */
   bounties: BoardBounty[];
   /** How many the tab shows before the toolbar's refinements. */
@@ -446,14 +455,16 @@ export function AllBounties({
             aria-label="Sort and filter bounties"
             className="flex flex-wrap items-center gap-2 pt-2.5 pb-2 lg:pt-2 transition-[opacity,translate] duration-150 ease-out starting:-translate-y-1 starting:opacity-0 motion-reduce:transition-none"
           >
-            <SelectMenu label="Sort by" value={sort} options={SORT_MENU_OPTIONS} onChange={onSortChange} testId="filter-sort" />
-            <SelectMenu
-              label="Ends within"
-              value={filters.endsWithin}
-              options={ENDS_WITHIN_OPTIONS}
-              onChange={(endsWithin) => onFiltersChange({ ...filters, endsWithin })}
-              testId="filter-ends"
-            />
+            <SelectMenu label="Sort by" value={sort} options={SORT_MENU_OPTIONS[status]} onChange={onSortChange} testId="filter-sort" />
+            {status === 'live' && (
+              <SelectMenu
+                label="Ends within"
+                value={filters.endsWithin}
+                options={ENDS_WITHIN_OPTIONS}
+                onChange={(endsWithin) => onFiltersChange({ ...filters, endsWithin })}
+                testId="filter-ends"
+              />
+            )}
             <SelectMenu
               label="Minimum reward"
               value={filters.minReward}
@@ -496,7 +507,7 @@ export function AllBounties({
         </div>
       ) : (
         <div className="flex flex-col items-center gap-3 rounded-xl border border-pk-border py-12 px-4 text-center">
-          <p className="text-body-base text-pk-content-secondary">No open bounties here right now.</p>
+          <p className="text-body-base text-pk-content-secondary">{status === 'won' ? 'No won bounties here yet.' : 'No open bounties here right now.'}</p>
           <button type="button" onClick={onShowAll} className={OUTLINE_BUTTON}>
             Show all bounties
           </button>

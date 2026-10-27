@@ -1,0 +1,28 @@
+{
+  "name": "Finding Nemo Seagulls 'Mine'",
+  "slug": "e-mine-mine-mine-seagulls",
+  "kind": "animated",
+  "source": {
+    "url": "https://imgflip.com/memetemplate/258086470/Mine-Mine-Mine",
+    "media": "https://i.imgflip.com/49nosm.mp4",
+    "imgflipTemplateId": 258086470,
+    "retrieved": "2026-10-27",
+    "note": "Imgflip blank (caption-free) template"
+  },
+  "crop": {
+    "x": 200,
+    "y": 0,
+    "size": 358,
+    "durationSec": 1.9
+  },
+  "output": {
+    "width": 192,
+    "height": 192,
+    "bytes": 119020,
+    "frames": 29,
+    "frameMs": 67,
+    "quality": 70,
+    "fps": 15,
+    "still": "still.png"
+  }
+}
