@@ -33,7 +33,7 @@ export function WinnersPanel({ bounty }: { bounty: BoardBounty }) {
   const margin = winners.length > 1 ? Math.abs(winners[0].score - winners[1].score) : null;
 
   return (
-    <section data-testid="winners-panel" aria-labelledby={titleId} className="flex min-w-0 shrink-0 flex-col rounded-xl border border-pk-border bg-pk-elevated">
+    <section id="winners" data-testid="winners-panel" aria-labelledby={titleId} className="flex min-w-0 shrink-0 scroll-mt-40 flex-col rounded-xl border border-pk-border bg-pk-elevated">
       <header className="flex flex-col gap-0.5 px-4 pt-3 pb-2">
         <h2 id={titleId} className="text-body-base font-semibold text-pk-content-primary">
           Winners

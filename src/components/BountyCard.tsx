@@ -168,7 +168,17 @@ export function BountyCard({ bounty }: { bounty: Bounty }) {
                 submissions && <p className="truncate">{submissions}</p>
               )}
             </div>
-            <div className="flex justify-center items-center">
+            <div className="flex shrink-0 items-center gap-1">
+              {isBoardBounty(bounty) && (
+                // Live: straight to the entry form. Won: straight to the winners. Sits above the card's stretched link (CARD_SHELL lifts every `a`).
+                <a
+                  href={`${bounty.url}#${won ? 'winners' : 'submit'}`}
+                  data-testid={won ? 'card-use' : 'card-submit'}
+                  className="inline-flex h-7 items-center rounded-full bg-pk-brand-500 px-3 text-body-sm font-semibold whitespace-nowrap text-pk-elevated transition-opacity hover:opacity-90 motion-reduce:transition-none outline-none focus-visible:ring-2 focus-visible:ring-pk-content-secondary focus-visible:ring-offset-1 focus-visible:ring-offset-pk-surface"
+                >
+                  {won ? 'Use' : 'Submit'}
+                </a>
+              )}
               <div className="flex">
                 <BookmarkButton eventId={`bounty:${bounty.id}`} />
               </div>

@@ -246,6 +246,14 @@ export function BountyPage({ bounty }: { bounty: BoardBounty }) {
   // who won is the first thing on a phone too.
   const large = useIsLarge();
 
+  // A card's Submit (#submit) or Use (#winners) lands here: the router scrolls to the top, so jump to that section once it has rendered.
+  useEffect(() => {
+    const id = window.location.hash.slice(1);
+    if (id !== 'submit' && id !== 'winners') return;
+    const frame = requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ block: 'start' }));
+    return () => cancelAnimationFrame(frame);
+  }, [bounty.slug]);
+
   return (
     <article data-testid="bounty-page" aria-labelledby={`${aboutId}-title`} className="mx-auto w-full max-w-[1350px] px-4 pt-6 pb-16 lg:px-6">
       <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
