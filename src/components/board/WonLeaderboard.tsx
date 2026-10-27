@@ -4,10 +4,10 @@ import { formatScore, leaderboard, scoreDecimals } from '../../lib/profile';
 
 /**
  * The final leaderboard of a won bounty: rank, competitor, verified score on the task and money won, #1 on top and
- * set apart. Each competitor's best entry counts once. The top 5 show first; the rest are one click away.
+ * set apart. Each competitor's best entry counts once. The top 3 show first; the rest are one click away.
  */
 
-const TOP = 5;
+const TOP = 3;
 const GRID = 'grid grid-cols-[3.5rem_minmax(0,1fr)_auto_6rem] items-center gap-x-4';
 
 export function WonLeaderboard({ bounty, extra, handle }: { bounty: BoardBounty; extra: Submission[]; handle: string }) {
@@ -60,7 +60,7 @@ export function WonLeaderboard({ bounty, extra, handle }: { bounty: BoardBounty;
           onClick={() => setAll((v) => !v)}
           className="h-11 cursor-pointer border-t border-pk-border text-body-sm font-semibold text-pk-content-primary transition-colors hover:bg-pk-hover-overlay-darker motion-reduce:transition-none outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pk-content-secondary"
         >
-          {all ? 'Show top 5' : `Show all ${rows.length} competitors`}
+          {all ? 'Show top 3' : `Show all ${rows.length} competitors`}
         </button>
       )}
     </section>
