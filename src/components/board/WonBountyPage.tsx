@@ -6,6 +6,7 @@ import { WON_BOUNTIES, wonRepo } from '../../lib/wonBounties';
 import { BountyCard } from '../BountyCard';
 import { BountyIcon } from '../BountyIcon';
 import { BountyDescription } from './BountyDescription';
+import { PerformanceChart } from './PerformanceChart';
 
 /**
  * A won bounty, as the board's Won cards and their "Use" button open it: the name, the description, then the winning
@@ -109,6 +110,8 @@ export function WonBountyPage({ bounty }: { bounty: BoardBounty }) {
   const profile = useProfile();
   const winner = useWinners(bounty)[0];
   const performance = usePerformance(bounty, profile.handle);
+  // Your own final entry, when you entered this bounty: the chart ranks it alongside everyone else's.
+  const mine = useMyEntries(bounty.slug);
   const owner = githubOwner(winner ? (winner.you ? profile.handle : winner.hunter) : bounty.sponsor.slug ?? bounty.sponsor.name);
   const repo = `github.com/${owner}/${wonRepo(bounty.slug) ?? bounty.slug}`;
   const clone = `git clone https://${repo}.git`;
@@ -164,6 +167,8 @@ export function WonBountyPage({ bounty }: { bounty: BoardBounty }) {
           </>
         )}
       </section>
+
+      <PerformanceChart bounty={bounty} extra={mine} handle={profile.handle} />
 
       <section aria-labelledby="won-bounty-repo" data-testid="won-bounty-repo" className="flex flex-col rounded-xl border border-pk-border bg-pk-elevated">
         <div className="flex items-center gap-3 px-4 py-3">
