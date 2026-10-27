@@ -30,30 +30,40 @@ ok('30 bounty cards on home', cards === 30, String(cards));
 ok('no old hero / rail / chips', !(await p.$('[data-testid=featured-bounty]')) && !(await p.$('[data-testid=bounty-rail]')) && !(await p.getByText('All bounties', { exact: true }).count()));
 const rewards = await p.$$eval('[data-reward]', (els) => els.map((e) => Number(e.getAttribute('data-reward'))));
 ok('Trending sorted by reward desc', rewards.every((r, i) => i === 0 || rewards[i - 1] >= r), rewards.slice(0, 5).join(','));
-// The trending carousel heads the page right under the header, and the grid follows the carousel directly.
+// Order under the header: the toolbar icons, then the trending carousel, then the grid.
 const headerBottom = await p.$eval('[data-testid=site-header]', (h) => h.getBoundingClientRect().bottom);
+const iconsBottom = await p.$eval('[data-testid=all-bounties] button[aria-label="Search bounties"]', (b) => b.getBoundingClientRect().bottom);
 const carousel = await p.$eval('[data-testid=trending-carousel]', (c) => { const r = c.getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; }).catch(() => null);
 const firstTop = await p.$eval('[data-testid=bounty-card]', (c) => c.getBoundingClientRect().top);
-ok('carousel sits at the top under the header, grid right after it', !!carousel && carousel.top - headerBottom < 40 && firstTop - carousel.bottom < 80, carousel ? `carousel ${Math.round(carousel.top - headerBottom)}px under the header, first card ${Math.round(firstTop - carousel.bottom)}px under the carousel` : 'no carousel');
-// Its slides are Trending's top 5, in order, each with a GIF, the bounty, submissions and a top-3 leaderboard.
-const slides = await p.$$eval('[data-testid=carousel-slide]', (ss) => ss.map((s) => ({ title: s.querySelector('h2')?.textContent.trim(), amount: s.querySelector('[data-testid=carousel-amount]')?.textContent, subs: s.querySelector('[data-testid=carousel-submissions]')?.textContent, rows: s.querySelectorAll('[data-testid=carousel-leaderboard-row]').length, gif: !!s.querySelector('[data-testid=carousel-icon] img') })));
+ok('toolbar icons, then the carousel, then the grid', !!carousel && iconsBottom - headerBottom < 80 && carousel.top >= iconsBottom && carousel.top - iconsBottom < 24 && firstTop - carousel.bottom < 40, carousel ? `icons end ${Math.round(iconsBottom - headerBottom)}px under the header, carousel ${Math.round(carousel.top - iconsBottom)}px under the icons, first card ${Math.round(firstTop - carousel.bottom)}px under the carousel` : 'no carousel');
+ok('no pager or prev / next under the carousel', !(await p.$('[data-testid=carousel-prev]')) && !(await p.$('[data-testid=carousel-next]')) && !(await p.$('[data-testid=carousel-pager]')));
+ok('rotation control hidden until keyboard focus', (await p.$eval('[data-testid=carousel-rotation]', (b) => getComputedStyle(b).opacity)) === '0');
+// Its slides are Trending's top 5, in order, each with a GIF, the bounty (large), a top-3 leaderboard and its submission count.
+const slides = await p.$$eval('[data-testid=carousel-slide]', (ss) => ss.map((s) => ({ title: s.querySelector('h2')?.textContent.trim(), amount: s.querySelector('[data-testid=carousel-amount]')?.textContent, size: getComputedStyle(s.querySelector('[data-testid=carousel-amount]')).fontSize, subs: s.querySelector('[data-testid=carousel-leaderboard] [data-testid=carousel-submissions]')?.textContent.trim(), rows: s.querySelectorAll('[data-testid=carousel-leaderboard-row]').length, gif: !!s.querySelector('[data-testid=carousel-icon] img'), statLabels: [...s.querySelectorAll('dt')].map((d) => d.textContent.trim()) })));
 const top5 = await p.$$eval('[data-testid=bounty-card] h3', (h) => h.slice(0, 5).map((x) => x.textContent.trim()));
 ok('carousel shows Trending top 5 in order', slides.length === 5 && slides.every((s, i) => s.title === top5[i]), slides.map((s) => s.title?.slice(0, 18)).join(' | '));
-ok('each slide has GIF, bounty, submissions and a 3-row leaderboard', slides.every((s) => s.gif && /^\$/.test(s.amount ?? '') && /\d/.test(s.subs ?? '') && s.rows === 3), JSON.stringify(slides[0]));
+ok('each slide: GIF, 36px bounty, no Submissions stat, "N submissions" over a 3-row leaderboard', slides.every((s) => s.gif && /^\$/.test(s.amount ?? '') && s.size === '36px' && !s.statLabels.includes('Submissions') && /^[\d,]+ submissions?$/.test(s.subs ?? '') && s.rows === 3), JSON.stringify(slides[0]));
 ok('one slide active, the rest inert', (await p.$$eval('[data-testid=carousel-slide]', (ss) => ss.filter((s) => !s.inert).length)) === 1);
-// It advances on its own: the strip slides left one card width.
+// It advances on its own every 9 seconds: the strip slides left one card width.
 await p.mouse.move(2, 890);
 const firstActive = await p.$eval('[data-testid=carousel-slide][data-active=true] h2', (h) => h.textContent.trim());
-await p.waitForFunction((t) => document.querySelector('[data-testid=carousel-slide][data-active=true] h2')?.textContent.trim() !== t, firstActive, { timeout: 8000 }).catch(() => {});
+await p.waitForFunction((t) => document.querySelector('[data-testid=carousel-slide][data-active=true] h2')?.textContent.trim() !== t, firstActive, { timeout: 12000 }).catch(() => {});
 await p.waitForTimeout(700);
 const moved = await p.evaluate(() => ({ active: document.querySelector('[data-testid=carousel-slide][data-active=true]')?.dataset.index, translate: getComputedStyle(document.querySelector('[data-testid=carousel-track]')).translate }));
 ok('carousel auto-advances to the left', moved.active === '1' && moved.translate.startsWith('-100%'), JSON.stringify(moved));
-await p.hover('[data-testid=carousel-track]');
+const dwell = await p.$eval('[data-testid=carousel-progress]', (e) => getComputedStyle(e).animationDuration).catch(() => '');
+ok('each slide holds for 9 seconds', dwell === '9s', dwell);
+await p.hover('[data-testid=carousel-slide][data-active=true]');
 ok('hovering pauses rotation', (await p.$eval('[data-testid=trending-carousel]', (c) => c.dataset.state)) === 'paused');
 await p.mouse.move(2, 890);
-await p.click('[data-testid=carousel-rotation]');
-ok('rotation control stops it', (await p.$eval('[data-testid=carousel-rotation]', (b) => b.getAttribute('aria-label'))) === 'Start automatic slide show' && (await p.$eval('[data-testid=trending-carousel]', (c) => c.dataset.state)) === 'paused');
-await p.click('[data-testid=carousel-rotation]');
+// Keyboard: Tab from the toolbar's last icon reaches the rotation control, which shows itself and stops the slide show.
+await p.focus('[data-testid=all-bounties] button[aria-label="Saved bounties"]');
+await p.keyboard.press('Tab');
+const rot = await p.$eval('[data-testid=carousel-rotation]', (b) => ({ focused: b === document.activeElement, opacity: getComputedStyle(b).opacity, label: b.getAttribute('aria-label') }));
+ok('Tab reveals the rotation control and stops rotation', rot.focused && rot.opacity === '1' && rot.label === 'Start automatic slide show' && (await p.$eval('[data-testid=trending-carousel]', (c) => c.dataset.state)) === 'paused', JSON.stringify(rot));
+await p.keyboard.press('Enter');
+ok('Enter on it restarts the slide show', (await p.$eval('[data-testid=carousel-rotation]', (b) => b.getAttribute('aria-label'))) === 'Stop automatic slide show');
+await p.evaluate(() => document.activeElement?.blur());
 await p.waitForTimeout(800);
 const icons = await p.$$eval('[data-testid=bounty-icon] img', (imgs) => imgs.map((i) => ({ src: i.currentSrc || i.src, ok: i.complete && i.naturalWidth > 0 })));
 ok('every card icon loaded', icons.length === 30 && icons.every((i) => i.ok), `${icons.filter((i) => i.ok).length}/${icons.length}`);
@@ -78,6 +88,7 @@ await p.locator('header nav a', { hasText: 'New' }).first().click(); await p.wai
 const carouselOnNew = !!(await p.$('[data-testid=trending-carousel]'));
 await p.locator('header nav a', { hasText: 'Trending' }).first().click(); await p.waitForTimeout(300);
 ok('carousel shows on Trending only', !carouselOnNew && !!(await p.$('[data-testid=trending-carousel]')));
+ok('Trending tab carries the fire emoji', (await p.locator('header nav a', { hasText: 'Trending' }).first().innerText()).startsWith('🔥'));
 
 // open a bounty (SPA, no reload)
 await p.evaluate(() => { window.__noReload = 1; });
@@ -207,6 +218,8 @@ await p2.close();
   const footer = await ps.$eval('#all-bounties ul > li', (li) => li.innerText.replace(/\s+/g, ' '));
   ok('Won: card reads Won by @handle, a Use button, no end date', /Won by @\w+/.test(footer) && /\bUse\b/.test(footer) && !/Ended [A-Z][a-z]{2} \d{1,2}/.test(footer), footer);
   ok('Won: document title', (await ps.title()) === 'Won bounties | agent.fun', await ps.title());
+  ok('Won: no trending carousel', !(await ps.$('[data-testid=trending-carousel]')));
+  ok('Won: Trending tab carries the fire emoji', (await ps.locator('header nav a', { hasText: 'Trending' }).first().innerText()).startsWith('🔥'));
   await ps.locator('#all-bounties button[aria-label^="Filter bounties"]').click();
   await ps.waitForTimeout(350);
   ok('Won: filter bar has sort and reward but no deadline menu', (await ps.locator('[data-testid=filter-ends]').count()) === 0 && (await ps.locator('[data-testid=filter-sort]').count()) === 1 && (await ps.locator('[data-testid=filter-reward]').count()) === 1);

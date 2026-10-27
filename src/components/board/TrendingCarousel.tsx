@@ -10,15 +10,17 @@ import { parseDescription } from './BountyDescription';
 
 /**
  * The board's featured feed: the top trending bounties, one slide at a time, the strip sliding left to the next one.
- * Anatomy after polymarket.com's "Featured markets" carousel (one wide card, a pill pager, neighbour-named prev / next);
- * each slide is the won bounty page's head (GIF, title, description, bounty, submissions) beside its top-3 leaderboard.
- * Behaviour is the WAI-ARIA APG auto-rotating carousel: a rotation control first in the tab order, rotation pauses while
- * the pointer is over it and stops for good when keyboard focus enters, off-screen slides are inert, and the slide group
- * is a polite live region only while rotation is stopped. Under reduced motion it never rotates and never slides.
+ * Anatomy after polymarket.com's "Featured markets" carousel (one wide card); each slide is the won bounty page's head
+ * (GIF, title, description, bounty) beside its top-3 leaderboard and submission count. No visible pager or prev / next:
+ * it turns on its own, and by swipe on touch screens.
+ * Behaviour is the WAI-ARIA APG auto-rotating carousel: a rotation control first in the tab order (shown only while it
+ * has keyboard focus), rotation pauses while the pointer is over it and stops for good when keyboard focus enters,
+ * off-screen slides are inert, and the slide group is a polite live region only while rotation is stopped. Under reduced
+ * motion it never rotates and never slides.
  *
- * Timing: the active pill's fill runs the dwell as a CSS animation (`pk-dwell`, index.css) and its `animationend`
- * advances the slide, so pausing the animation pauses the clock exactly where the bar stands. The loop is seamless: a
- * clone of slide 1 sits after the last slide, the strip slides onto it, then snaps back to the real slide 1 unseen.
+ * Timing: a hidden element runs the dwell as a CSS animation (`pk-dwell`, index.css) and its `animationend` advances
+ * the slide, so pausing the animation pauses the clock where it stands. The loop is seamless: a clone of slide 1 sits
+ * after the last slide, the strip slides onto it, then snaps back to the real slide 1 unseen.
  */
 
 const FOCUS_RING = 'outline-none focus-visible:ring-2 focus-visible:ring-pk-content-secondary focus-visible:ring-offset-2 focus-visible:ring-offset-pk-surface';
@@ -54,12 +56,6 @@ function useOnScreen(ref: RefObject<HTMLElement | null>): boolean {
   return on;
 }
 
-const Chevron = ({ flip = false }: { flip?: boolean }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true" className={`shrink-0 ${flip ? 'rotate-180' : ''}`}>
-    <path fill="currentColor" d="M12.286 14.786a.876.876 0 0 1-1.238 0L6.882 10.62a.875.875 0 0 1 0-1.237l4.166-4.167a.876.876 0 0 1 1.238 1.237L8.738 10l3.548 3.548a.877.877 0 0 1 0 1.238" />
-  </svg>
-);
-
 const PauseGlyph = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
     <rect x="3.5" y="2.5" width="3" height="11" rx="1" fill="currentColor" />
@@ -83,6 +79,7 @@ function SlideLeaderboard({ bounty, won }: { bounty: BoardBounty; won: boolean }
   const rows = useMemo(() => leaderboard(bounty, mine), [bounty, mine]);
   const metric = bounty.resolution?.metric;
   const dp = scoreDecimals(bounty);
+  const submissions = bounty.submissionCount ?? bounty.submissions.length;
 
   return (
     // A column of the slide, not a card in a card: divided off by a hairline (left at lg, above when stacked).
@@ -93,11 +90,9 @@ function SlideLeaderboard({ bounty, won }: { bounty: BoardBounty; won: boolean }
     >
       <div className="flex items-baseline justify-between gap-3 pb-2">
         <h3 className="text-body-base font-semibold text-pk-content-primary">Leaderboard</h3>
-        {rows.length > 0 && (
-          <span className="text-body-sm text-pk-content-secondary tabular-nums">
-            {rows.length} {rows.length === 1 ? 'competitor' : 'competitors'}
-          </span>
-        )}
+        <span className="text-body-sm text-pk-content-secondary tabular-nums" data-testid="carousel-submissions">
+          {submissions.toLocaleString('en-US')} {submissions === 1 ? 'submission' : 'submissions'}
+        </span>
       </div>
       {!metric || rows.length === 0 ? (
         <p className="py-6 text-body-base text-pk-content-secondary">No verified scores yet. Be the first.</p>
@@ -204,17 +199,12 @@ function Slide({ bounty, index, count, active, clone }: { bounty: BoardBounty; i
 
         {lead && <p className="line-clamp-2 max-w-[80ch] text-body-base text-pk-content-secondary sm:line-clamp-3">{lead}</p>}
 
-        <dl className="mt-auto grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
+        {/* The bounty is the slide's largest figure; the submission count lives in the leaderboard's header. */}
+        <dl className="mt-auto flex flex-wrap items-end gap-x-12 gap-y-3">
           <div className="flex flex-col gap-1">
             <dt className={LABEL}>Bounty</dt>
-            <dd className={`text-heading-2xl tabular-nums ${won ? 'text-pk-content-secondary' : 'text-pk-content-primary'}`} data-testid="carousel-amount">
+            <dd className={`text-heading-4xl tabular-nums ${won ? 'text-pk-content-secondary' : 'text-pk-content-primary'}`} data-testid="carousel-amount">
               {formatBountyAmount(bounty.rewardAmount)}
-            </dd>
-          </div>
-          <div className="flex flex-col gap-1">
-            <dt className={LABEL}>Submissions</dt>
-            <dd className="text-heading-xl tabular-nums text-pk-content-primary" data-testid="carousel-submissions">
-              {(bounty.submissionCount ?? bounty.submissions.length).toLocaleString('en-US')}
             </dd>
           </div>
           <SlideClock bounty={bounty} labelId={`${id}-clock`} won={won} />
@@ -287,18 +277,7 @@ export function TrendingCarousel({ bounties, status = 'live' }: { bounties: Boar
     [n, reduced, move, jumpThen],
   );
 
-  const goTo = useCallback(
-    (i: number) => {
-      if (i === posRef.current % n) return;
-      cancelAnimationFrame(frame.current);
-      move(i, !reduced);
-    },
-    [n, reduced, move],
-  );
-
   const ordered = n > 1 ? [...bounties, bounties[0]] : bounties;
-  const prevB = bounties[(index - 1 + n) % n];
-  const nextB = bounties[(index + 1) % n];
   const label = status === 'won' ? 'Top won bounties' : 'Trending bounties';
 
   if (n === 0) return null;
@@ -321,7 +300,7 @@ export function TrendingCarousel({ bounties, status = 'live' }: { bounties: Boar
       aria-label={label}
       data-testid="trending-carousel"
       data-state={running ? 'running' : 'paused'}
-      className="flex flex-col gap-3"
+      className="relative"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onFocus={(e) => {
@@ -330,79 +309,32 @@ export function TrendingCarousel({ bounties, status = 'live' }: { bounties: Boar
         if (e.target instanceof HTMLElement && e.target.matches(':focus-visible')) setPlaying(false);
       }}
     >
-      {/* Controls come first in the DOM (APG: the rotation control precedes the rotating content) and sit under the card. */}
-      {n > 1 && (
-        <div className="order-last flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
-            {canRotate && (
-              <button
-                type="button"
-                data-testid="carousel-rotation"
-                aria-label={playing ? 'Stop automatic slide show' : 'Start automatic slide show'}
-                onClick={() => setPlaying((v) => !v)}
-                className={`inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-pk-content-secondary transition-colors hover:bg-pk-hover-overlay-darker hover:text-pk-content-primary motion-reduce:transition-none ${FOCUS_RING}`}
-              >
-                {playing ? <PauseGlyph /> : <PlayGlyph />}
-              </button>
-            )}
-            <div className="flex items-center" data-testid="carousel-pager">
-              {bounties.map((b, i) => {
-                const current = i === index;
-                return (
-                  <button
-                    key={b.id}
-                    type="button"
-                    tabIndex={-1}
-                    aria-label={`Show ${b.title}`}
-                    aria-current={current ? 'true' : undefined}
-                    onClick={() => goTo(i)}
-                    className="group flex h-6 cursor-pointer items-center px-[3px]"
-                  >
-                    <span
-                      className={`relative block h-1.5 overflow-hidden rounded-full transition-colors duration-150 motion-reduce:transition-none ${
-                        current ? 'w-8 bg-pk-gray-200' : 'w-1.5 bg-pk-gray-300 group-hover:bg-pk-gray-500'
-                      }`}
-                    >
-                      {current &&
-                        (canRotate && playing ? (
-                          <span
-                            data-testid="carousel-progress"
-                            className="pk-dwell absolute inset-0 rounded-full bg-pk-content-secondary"
-                            style={{ animationPlayState: running ? 'running' : 'paused' }}
-                            onAnimationEnd={() => step(1)}
-                          />
-                        ) : (
-                          <span className="absolute inset-0 rounded-full bg-pk-content-secondary" />
-                        ))}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <div className="flex min-w-0 items-center gap-2">
-            <button
-              type="button"
-              data-testid="carousel-prev"
-              aria-label={`Previous: ${prevB.title}`}
-              onClick={() => step(-1)}
-              className={`inline-flex h-9 min-w-9 shrink cursor-pointer items-center justify-center gap-1 rounded-full bg-pk-gray-100 px-2.5 text-body-sm font-semibold text-pk-content-primary transition-colors hover:bg-pk-gray-200 motion-reduce:transition-none sm:pr-3.5 ${FOCUS_RING}`}
-            >
-              <Chevron />
-              <span className="hidden max-w-[200px] truncate sm:block">{prevB.title}</span>
-            </button>
-            <button
-              type="button"
-              data-testid="carousel-next"
-              aria-label={`Next: ${nextB.title}`}
-              onClick={() => step(1)}
-              className={`inline-flex h-9 min-w-9 shrink cursor-pointer items-center justify-center gap-1 rounded-full bg-pk-gray-100 px-2.5 text-body-sm font-semibold text-pk-content-primary transition-colors hover:bg-pk-gray-200 motion-reduce:transition-none sm:pl-3.5 ${FOCUS_RING}`}
-            >
-              <span className="hidden max-w-[200px] truncate sm:block">{nextB.title}</span>
-              <Chevron flip />
-            </button>
-          </div>
-        </div>
+      {/*
+        The rotation control: first in the tab order (APG: it precedes the rotating content) and invisible until it has
+        keyboard focus, like a skip link, so the card shows no controls to a pointer user but a keyboard or screen reader
+        user can still stop and start the slide show.
+      */}
+      {canRotate && (
+        <button
+          type="button"
+          data-testid="carousel-rotation"
+          aria-label={playing ? 'Stop automatic slide show' : 'Start automatic slide show'}
+          onClick={() => setPlaying((v) => !v)}
+          className={`pointer-events-none absolute top-3 left-3 z-30 inline-flex size-8 cursor-pointer items-center justify-center rounded-full bg-pk-surface text-pk-content-primary opacity-0 shadow-pk-middle focus-visible:pointer-events-auto focus-visible:opacity-100 ${FOCUS_RING}`}
+        >
+          {playing ? <PauseGlyph /> : <PlayGlyph />}
+        </button>
+      )}
+      {/* The dwell clock: nothing to see; keyed by slide so every slide gets the full dwell, paused with the carousel. */}
+      {canRotate && playing && (
+        <span
+          key={index}
+          aria-hidden="true"
+          data-testid="carousel-progress"
+          className="pk-dwell pointer-events-none absolute top-0 left-0 size-px opacity-0"
+          style={{ animationPlayState: running ? 'running' : 'paused' }}
+          onAnimationEnd={() => step(1)}
+        />
       )}
 
       <div className="overflow-hidden rounded-xl border border-pk-border bg-pk-elevated shadow-pk-minimal-soft" style={{ touchAction: 'pan-y' }} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>

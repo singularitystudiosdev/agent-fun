@@ -60,11 +60,11 @@ const ChevronIcon = ({ flip = false }: { flip?: boolean }) => (
   </svg>
 );
 
+/** The Trending tab's mark: a fire emoji in the 20px box the old trend-up arrow used, decorative (the tab's text names it). */
 const TrendingIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" fill="none" aria-hidden="true" className="size-5">
-    <path d="M1.75,12.25l3.646-3.646c.195-.195,.512-.195,.707,0l3.293,3.293c.195,.195,.512,.195,.707,0l6.146-6.146" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
-    <polyline points="11.25 5.75 16.25 5.75 16.25 10.75" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
-  </svg>
+  <span aria-hidden="true" data-testid="trending-fire" className="inline-flex size-5 items-center justify-center text-[16px] leading-none select-none">
+    🔥
+  </span>
 );
 
 /** The brand mark: the agent.fun GIF, frozen on its first frame when the user prefers reduced motion. */

@@ -26,6 +26,15 @@
       "allow": [
         "duration-over-300ms"
       ]
+    },
+    {
+      "note": "The Trending tab's mark is a fire emoji by the site owner's request, not a bullet.",
+      "files": [
+        "src/components/board/SiteHeader.tsx"
+      ],
+      "allow": [
+        "emoji-bullet"
+      ]
     }
   ]
 }

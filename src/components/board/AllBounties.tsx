@@ -302,9 +302,12 @@ export function AllBounties({
   onSavedOnlyChange,
   sort,
   onSortChange,
+  featured,
 }: {
   /** The board's mode. Won hides the deadline menu (nothing is ending) and offers Won's sorts. */
   status?: BoardStatus;
+  /** The trending carousel: rendered under the toolbar (and its filter row), above the grid. */
+  featured?: ReactNode;
   /** The tab's bounties after the toolbar's refinements, in display order. */
   bounties: BoardBounty[];
   /** How many the tab shows before the toolbar's refinements. */
@@ -482,6 +485,8 @@ export function AllBounties({
           </div>
         </div>
       </div>
+
+      {featured && <div className="pt-2 pb-4">{featured}</div>}
 
       <div role="status" className={refined && total > 0 ? 'flex items-center gap-3 pb-2' : 'sr-only'}>
         {refined && total > 0 && (

@@ -169,7 +169,9 @@ await settle();
 check('Escape closes the menu, focus back on trigger', (await menu.count()) === 0 && (await trig('filter-ends').evaluate((el) => el === document.activeElement)));
 await trig('filter-ends').click();
 await settle();
-await page.mouse.click(1300, 860);
+// The toolbar row's empty left end: outside the menu and on nothing clickable, whatever the grid or the carousel holds.
+const row = await page.locator('#all-bounties button[aria-label="Search bounties"]').boundingBox();
+await page.mouse.click(40, row.y + row.height / 2);
 await settle();
 check('outside click closes the menu', (await menu.count()) === 0);
 

@@ -200,6 +200,15 @@
   font-weight: 600;
   line-height: 28px;
 }
+/* One step up the same ramp, for the trending carousel's bounty figure. Not a polymarket.com token. */
+@utility text-heading-4xl {
+  font-family: var(--font-inter, 'Inter'), sans-serif;
+  font-feature-settings: var(--inter-font-features);
+  letter-spacing: -0.02em;
+  font-size: 36px;
+  font-weight: 600;
+  line-height: 40px;
+}
 
 /* One rolling digit glyph: transform-only transition on the 702 ms spring above. check-ui allows duration-over-300ms only in index.css, hence a utility instead of duration-[702ms] in the component. */
 @utility pk-roll {
@@ -220,8 +229,8 @@
   transition-duration: 500ms; /* deliberate */
   transition-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
 }
-/* The active pager pill fills over one slide's dwell; its animationend advances the slide, so pausing it pauses the clock.
-   Not a motion of content: a 6s linear progress fill, scaleX only (compositor work). */
+/* One slide's dwell, 9s, run as an animation on a hidden element: its animationend advances the slide, so pausing the
+   animation (hover, keyboard focus, off screen) pauses the clock. Nothing visible moves. */
 @keyframes pk-dwell {
   from {
     scale: 0 1;
@@ -232,7 +241,7 @@
 }
 @utility pk-dwell {
   transform-origin: left center;
-  animation: pk-dwell 6s linear forwards; /* deliberate */
+  animation: pk-dwell 9s linear forwards; /* deliberate */
 }
 @media (prefers-reduced-motion: reduce) {
   .pk-slide {

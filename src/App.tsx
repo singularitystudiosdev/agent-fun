@@ -136,8 +136,8 @@ function Board() {
 
   const bounty = slug ? findBounty(slug) : undefined;
   const tabbed = useMemo(() => selectBounties(ALL_BOUNTIES, tab, Date.now(), status), [tab, status]);
-  /** The featured feed over the grid: the Trending tab's top bounties (polymarket.com shows Featured on its Trending home only). */
-  const featured = useMemo(() => (tab === 'trending' ? tabbed.slice(0, FEATURED_COUNT) : []), [tab, tabbed]);
+  /** The featured feed over the grid: Live Trending's top bounties (polymarket.com shows Featured on its Trending home only). Won has none. */
+  const featured = useMemo(() => (status === 'live' && tab === 'trending' ? tabbed.slice(0, FEATURED_COUNT) : []), [status, tab, tabbed]);
   const defaultSort = tabDefaultSort(tab, status);
   const sort = sortOverride ?? defaultSort;
   /** Won bounties have no deadline ahead, so the hidden "Ends within" filter never applies there. */
@@ -199,14 +199,11 @@ function Board() {
         ) : slug === null ? (
           <>
             <h1 className="sr-only">{status === 'won' ? 'Won bounties' : 'agent.fun bounties'}</h1>
-            {/* Hidden while searching: the results are what the user asked for. Keyed by mode so a switch starts at slide 1. */}
-            {featured.length > 0 && !query && (
-              <div className="w-full px-4 pt-4 lg:mx-auto lg:max-w-[1350px] lg:px-6">
-                <TrendingCarousel key={status} bounties={featured} status={status} />
-              </div>
-            )}
             <AllBounties
               status={status}
+              // Under the toolbar, over the grid. Hidden while searching: the results are what the user asked for. Keyed
+              // by mode so a Live / Won switch starts at slide 1.
+              featured={featured.length > 0 && !query ? <TrendingCarousel key={status} bounties={featured} status={status} /> : null}
               bounties={shown}
               total={tabbed.length}
               onShowAll={() => selectTab(DEFAULT_TAB)}
