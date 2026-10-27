@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { formatBountyAmount, type BoardBounty } from '../../lib/bounty';
 import { appHref } from '../../lib/paths';
-import { useProfile, useWinners } from '../../lib/profile';
+import { formatScore, leaderboard, scoreDecimals, useMyEntries, useProfile, useWinners } from '../../lib/profile';
 import { WON_BOUNTIES, wonRepo } from '../../lib/wonBounties';
 import { BountyCard } from '../BountyCard';
 import { BountyIcon } from '../BountyIcon';
@@ -56,9 +56,59 @@ function CopyButton({ text, label, testId }: { text: string; label: string; test
   );
 }
 
+/** The description up to its first "## " subheading: the paragraphs that say what the bounty was. */
+const introOf = (text: string): string => text.split(/\n(?=## )/)[0].trim();
+
+/** A metric name mid-sentence: "Net return" becomes "net return"; an acronym such as "RMSE" stays as written. */
+const inSentence = (name: string): string => (/^[A-Z][a-z]/.test(name) ? name[0].toLowerCase() + name.slice(1) : name);
+
+const median = (xs: number[]): number => {
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+};
+
+/**
+ * How the winning entry performed, from the bounty's own final leaderboard: the winning score, the margin over 2nd and
+ * 3rd, and where it sat against the rest of the scored field. Two short paragraphs, each specific to this bounty.
+ */
+function usePerformance(bounty: BoardBounty, handle: string): string[] {
+  const mine = useMyEntries(bounty.slug);
+  return useMemo(() => {
+    const metric = bounty.resolution?.metric;
+    const board = leaderboard(bounty, mine);
+    if (!metric || board.length === 0) return [];
+    const dp = scoreDecimals(bounty);
+    const fmt = (v: number) => formatScore(v, metric, dp);
+    const who = (h: string) => `@${h}${h === handle ? ' (you)' : ''}`;
+    const [first, second, third] = board;
+    const lead = (row: { score: number }) => fmt(Math.abs(first.score - row.score));
+    const entry = bounty.submissions.find((s) => s.hunter === first.hunter && s.score === first.score && s.title)?.title;
+
+    const podium = [
+      `${who(first.hunter)} won with a ${inSentence(metric.name)} of ${fmt(first.score)}`,
+      second ? `, ${lead(second)} ahead of ${who(second.hunter)} in 2nd (${fmt(second.score)})` : '',
+      third ? ` and ${lead(third)} ahead of ${who(third.hunter)} in 3rd (${fmt(third.score)})` : '',
+      '.',
+    ].join('');
+
+    const scores = board.map((r) => r.score);
+    const mid = median(scores);
+    const others = board.length - 1;
+    const field = [
+      entry ? `The winning entry, "${entry}", beat` : 'The winning entry beat',
+      ` ${others} other scored ${others === 1 ? 'entrant' : 'entrants'} across ${bounty.submissionCount.toLocaleString('en-US')} submissions.`,
+      board.length >= 3 ? ` The median verified score was ${fmt(mid)}, so the winner finished ${fmt(Math.abs(first.score - mid))} better than the middle of the field.` : '',
+    ].join('');
+
+    return [podium, field];
+  }, [bounty, mine, handle]);
+}
+
 export function WonBountyPage({ bounty }: { bounty: BoardBounty }) {
   const profile = useProfile();
   const winner = useWinners(bounty)[0];
+  const performance = usePerformance(bounty, profile.handle);
   const owner = githubOwner(winner ? (winner.you ? profile.handle : winner.hunter) : bounty.sponsor.slug ?? bounty.sponsor.name);
   const repo = `github.com/${owner}/${wonRepo(bounty.slug) ?? bounty.slug}`;
   const clone = `git clone https://${repo}.git`;
@@ -99,7 +149,20 @@ export function WonBountyPage({ bounty }: { bounty: BoardBounty }) {
         <h2 id="won-bounty-description" className="text-body-base font-semibold text-pk-content-primary">
           Description
         </h2>
-        <BountyDescription text={bounty.description ?? ''} />
+        {/* The brief's intro only: its Deliverables and Requirements give way to how the winner performed. */}
+        <BountyDescription text={introOf(bounty.description ?? '')} />
+        {performance.length > 0 && (
+          <>
+            <h2 className="pt-2 text-body-base font-semibold text-pk-content-primary">Performance</h2>
+            <div className="flex flex-col gap-2 text-body-base text-pk-content-secondary" data-testid="won-bounty-performance">
+              {performance.map((line) => (
+                <p key={line} className="text-pretty">
+                  {line}
+                </p>
+              ))}
+            </div>
+          </>
+        )}
       </section>
 
       <section aria-labelledby="won-bounty-repo" data-testid="won-bounty-repo" className="flex flex-col rounded-xl border border-pk-border bg-pk-elevated">
