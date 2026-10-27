@@ -1,25 +1,24 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState, type PointerEvent } from 'react';
 import type { BoardBounty, Submission } from '../../lib/bounty';
-import { formatScore, leaderboard, scoreDecimals } from '../../lib/profile';
+import { formatScore, scoreDecimals } from '../../lib/profile';
 
 /**
- * How the winning entry compares with every other scored submission: one column per submission, best to worst, height
- * = performance (taller is better whichever way the metric wins), so the winner always stands at the left. The winner
- * is brand blue, the 2nd and 3rd place entries dark neutral, the rest light neutral (contrast relief: the legend, the
- * hover tooltip and a table for assistive tech). A dashed line marks the median.
+ * How the winning entry compares with every other scored submission: one clean line through every verified score,
+ * ranked best to worst, so the winner sits top left and the field trails away beneath it. The vertical axis runs best
+ * to worst whichever way the metric wins (labels carry the real values). A dashed rule marks the median; hovering
+ * shows a crosshair and that entry's handle, score and rank. A table carries the same data for assistive tech.
  */
 
-interface Bar {
+interface Point {
   hunter: string;
   score: number;
-  place: 1 | 2 | 3 | null;
   /** 0 (worst) to 1 (best). */
   p: number;
 }
 
-const BAR_FILL: Record<'1' | 'podium' | 'rest', string> = { '1': 'bg-pk-brand-500', podium: 'bg-pk-content-secondary', rest: 'bg-pk-gray-500' };
-/** The shortest column, so the worst submission still reads as a bar. */
-const MIN_HEIGHT = 0.04;
+/** Plot coordinates in percent: x across the ranks, y from the top (best) with a little headroom at both ends. */
+const xOf = (i: number, n: number) => (n === 1 ? 0 : (i / (n - 1)) * 100);
+const yOf = (p: number) => 6 + (1 - p) * 88;
 
 const median = (xs: number[]): number => {
   const s = [...xs].sort((a, b) => a - b);
@@ -30,6 +29,7 @@ const median = (xs: number[]): number => {
 export function PerformanceChart({ bounty, extra, handle }: { bounty: BoardBounty; extra: Submission[]; handle: string }) {
   const metric = bounty.resolution?.metric;
   const [hover, setHover] = useState<number | null>(null);
+  const plotRef = useRef<HTMLDivElement>(null);
 
   const data = useMemo(() => {
     if (!metric) return null;
@@ -40,96 +40,103 @@ export function PerformanceChart({ bounty, extra, handle }: { bounty: BoardBount
     const best = scored[0].score;
     const worst = scored[scored.length - 1].score;
     const span = Math.abs(best - worst) || 1;
-    // Podium places come from the leaderboard (each hunter's best); mark the bar of each placed hunter's best entry.
-    const podium = leaderboard(bounty, extra).slice(0, 3);
-    const marked = new Set<number>();
-    const placeOf = (s: { hunter: string; score: number }): Bar['place'] => {
-      const k = podium.findIndex((r) => r.hunter === s.hunter && r.score === s.score);
-      if (k < 0 || marked.has(k)) return null;
-      marked.add(k);
-      return (k + 1) as 1 | 2 | 3;
-    };
-    const bars: Bar[] = scored.map((s) => ({ hunter: s.hunter, score: s.score, place: placeOf(s), p: Math.abs(s.score - worst) / span }));
+    const points: Point[] = scored.map((s) => ({ hunter: s.hunter, score: s.score, p: Math.abs(s.score - worst) / span }));
     const mid = median(scored.map((s) => s.score));
-    return { bars, best, worst, mid, midP: Math.abs(mid - worst) / span };
+    // The line in a 1000 x 100 box; the SVG stretches to the plot and the stroke stays 2px (non-scaling).
+    const path = points.map((pt, i) => `${i === 0 ? 'M' : 'L'}${(xOf(i, points.length) * 10).toFixed(1)},${yOf(pt.p).toFixed(2)}`).join(' ');
+    return { points, best, worst, mid, midP: Math.abs(mid - worst) / span, path };
   }, [bounty, extra, metric]);
 
   if (!metric || !data) return null;
   const dp = scoreDecimals(bounty);
   const fmt = (v: number) => formatScore(v, metric, dp);
   const who = (h: string) => `@${h}${h === handle ? ' (you)' : ''}`;
-  const winner = data.bars[0];
-  const shown = hover === null ? null : data.bars[hover];
-  const height = (p: number) => `${(MIN_HEIGHT + (1 - MIN_HEIGHT) * p) * 100}%`;
+  const n = data.points.length;
+  const winner = data.points[0];
+  const shown = hover === null ? null : data.points[hover];
+
+  const onMove = (e: PointerEvent<HTMLDivElement>) => {
+    const box = plotRef.current?.getBoundingClientRect();
+    if (!box || box.width === 0) return;
+    const rel = Math.min(1, Math.max(0, (e.clientX - box.left) / box.width));
+    setHover(Math.round(rel * (n - 1)));
+  };
 
   return (
     <figure data-testid="won-bounty-chart" className="flex flex-col gap-3 rounded-xl border border-pk-border bg-pk-elevated p-4">
-      <figcaption className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-        <span className="text-body-base font-semibold text-pk-content-primary">
-          Every scored submission, best to worst
-          <span className="ml-2 text-body-sm font-normal text-pk-content-secondary">
-            {data.bars.length} submissions, {metric.name} ({metric.better} wins)
-          </span>
-        </span>
-        <span className="flex flex-wrap items-center gap-x-4 gap-y-1 text-body-sm text-pk-content-secondary" aria-hidden="true">
-          <span className="inline-flex items-center gap-1.5">
-            <span className={`size-2.5 rounded-xs ${BAR_FILL['1']}`} />
-            Winner {who(winner.hunter)}
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className={`size-2.5 rounded-xs ${BAR_FILL.podium}`} />
-            2nd and 3rd
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className={`size-2.5 rounded-xs ${BAR_FILL.rest}`} />
-            Everyone else
-          </span>
+      <figcaption className="text-body-base font-semibold text-pk-content-primary">
+        Every scored submission, best to worst
+        <span className="ml-2 text-body-sm font-normal text-pk-content-secondary">
+          {n} submissions, {metric.name} ({metric.better} wins)
         </span>
       </figcaption>
 
       <div className="flex gap-3">
-        {/* The value scale: best at the top, worst at the bottom, in the metric's own unit (aligned to the plot, not its caption). */}
-        <div className="flex h-40 shrink-0 flex-col justify-between self-start text-right text-body-xs text-pk-content-secondary tabular-nums" aria-hidden="true">
-          <span>{fmt(data.best)}</span>
-          <span>{fmt(data.worst)}</span>
+        {/* The value scale: best at the top, worst at the bottom, in the metric's own unit. */}
+        <div className="relative h-44 w-16 shrink-0 text-right text-body-xs text-pk-content-secondary tabular-nums" aria-hidden="true">
+          <span className="absolute right-0 -translate-y-1/2" style={{ top: `${yOf(1)}%` }}>
+            {fmt(data.best)}
+          </span>
+          <span className="absolute right-0 -translate-y-1/2" style={{ top: `${yOf(0)}%` }}>
+            {fmt(data.worst)}
+          </span>
         </div>
+
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className="relative h-40 min-w-0" role="img" aria-label={`${who(winner.hunter)} placed first with ${fmt(winner.score)}. ${data.bars.length} scored submissions range from ${fmt(data.best)} to ${fmt(data.worst)}; the median is ${fmt(data.mid)}.`}>
-          {/* The surface gap between columns thins out as the field grows, so 196 entries still fit a phone. */}
           <div
-            className={`absolute inset-0 flex items-end border-b border-pk-border ${data.bars.length <= 40 ? 'gap-0.5' : data.bars.length <= 100 ? 'gap-0 md:gap-px' : 'gap-0 xl:gap-px'}`}
+            ref={plotRef}
+            className="relative h-44 min-w-0 cursor-crosshair touch-pan-y"
+            onPointerMove={onMove}
+            onPointerDown={onMove}
             onPointerLeave={() => setHover(null)}
+            role="img"
+            aria-label={`${who(winner.hunter)} placed first with ${fmt(winner.score)}. ${n} scored submissions run from ${fmt(data.best)} down to ${fmt(data.worst)}; the median is ${fmt(data.mid)}.`}
           >
-            {data.bars.map((b, i) => (
-              // The whole column is the hover target, not just the bar.
-              <div key={i} className="flex h-full min-w-0 flex-1 items-end" onPointerEnter={() => setHover(i)} data-place={b.place ?? undefined}>
-                <div
-                  className={`w-full rounded-t-xs ${b.place === 1 ? BAR_FILL['1'] : b.place ? BAR_FILL.podium : BAR_FILL.rest} ${hover !== null && hover !== i ? 'opacity-60' : ''}`}
-                  style={{ height: height(b.p) }}
-                />
-              </div>
-            ))}
-          </div>
-          {/* The median: a recessive dashed rule with its value. */}
-          <div className="pointer-events-none absolute inset-x-0 border-t border-dashed border-pk-content-tertiary" style={{ bottom: height(data.midP) }}>
-            <span className="absolute right-0 -translate-y-full pb-0.5 text-body-xs text-pk-content-secondary">Median {fmt(data.mid)}</span>
-          </div>
-          {shown && hover !== null && (
-            <div
-              className="pointer-events-none absolute top-0 z-10 rounded-md bg-pk-surface px-2.5 py-1.5 text-body-sm shadow-pk-middle whitespace-nowrap"
-              style={hover / data.bars.length > 0.6 ? { right: `${(1 - (hover + 1) / data.bars.length) * 100}%` } : { left: `${(hover / data.bars.length) * 100}%` }}
-              data-testid="won-bounty-chart-tooltip"
-            >
-              <span className="font-semibold text-pk-content-primary">{who(shown.hunter)}</span>
-              <span className="ml-2 text-pk-content-secondary tabular-nums">{fmt(shown.score)}</span>
-              <span className="ml-2 text-pk-content-secondary">#{hover + 1}</span>
+            {/* Recessive frame: the best and worst gridlines, and the median as a dashed rule. */}
+            <div className="pointer-events-none absolute inset-x-0 border-t border-pk-border" style={{ top: `${yOf(1)}%` }} />
+            <div className="pointer-events-none absolute inset-x-0 border-t border-pk-border" style={{ top: `${yOf(0)}%` }} />
+            <div className="pointer-events-none absolute inset-x-0 border-t border-dashed border-pk-content-tertiary" style={{ top: `${yOf(data.midP)}%` }}>
+              <span className="absolute right-0 -translate-y-full pb-0.5 text-body-xs text-pk-content-secondary">Median {fmt(data.mid)}</span>
             </div>
-          )}
-        </div>
-        <div className="flex justify-between text-body-xs text-pk-content-secondary" aria-hidden="true">
-          <span>Best</span>
-          <span>Worst</span>
-        </div>
+
+            <svg className="pointer-events-none absolute inset-0 size-full overflow-visible" viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true">
+              <path d={data.path} fill="none" stroke="var(--color-pk-brand-500, #2e5cff)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+            </svg>
+
+            {/* The winner: a ringed point and a direct label, drawn in HTML so the dot stays round. */}
+            <span
+              className="pointer-events-none absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-pk-brand-500 ring-2 ring-pk-elevated"
+              style={{ left: `${xOf(0, n)}%`, top: `${yOf(winner.p)}%` }}
+              data-testid="won-bounty-chart-winner"
+            />
+            <span className="pointer-events-none absolute ml-3 -translate-y-1/2 text-body-sm whitespace-nowrap" style={{ left: `${xOf(0, n)}%`, top: `${yOf(winner.p) + 9}%` }}>
+              <span className="font-semibold text-pk-content-primary">{who(winner.hunter)}</span>
+              <span className="ml-1.5 text-pk-content-secondary tabular-nums">{fmt(winner.score)}</span>
+            </span>
+
+            {shown && hover !== null && (
+              <>
+                <div className="pointer-events-none absolute inset-y-0 border-l border-pk-gray-300" style={{ left: `${xOf(hover, n)}%` }} />
+                <span
+                  className="pointer-events-none absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-pk-brand-500 ring-2 ring-pk-elevated"
+                  style={{ left: `${xOf(hover, n)}%`, top: `${yOf(shown.p)}%` }}
+                />
+                <div
+                  className="pointer-events-none absolute top-0 z-10 rounded-md bg-pk-surface px-2.5 py-1.5 text-body-sm whitespace-nowrap shadow-pk-middle"
+                  style={hover / (n - 1) > 0.6 ? { right: `calc(${100 - xOf(hover, n)}% + 8px)` } : { left: `calc(${xOf(hover, n)}% + 8px)` }}
+                  data-testid="won-bounty-chart-tooltip"
+                >
+                  <span className="font-semibold text-pk-content-primary">{who(shown.hunter)}</span>
+                  <span className="ml-2 text-pk-content-secondary tabular-nums">{fmt(shown.score)}</span>
+                  <span className="ml-2 text-pk-content-secondary">#{hover + 1}</span>
+                </div>
+              </>
+            )}
+          </div>
+          <div className="flex justify-between text-body-xs text-pk-content-secondary" aria-hidden="true">
+            <span>#1</span>
+            <span>#{n}</span>
+          </div>
         </div>
       </div>
 
@@ -144,11 +151,11 @@ export function PerformanceChart({ bounty, extra, handle }: { bounty: BoardBount
           </tr>
         </thead>
         <tbody>
-          {data.bars.map((b, i) => (
+          {data.points.map((pt, i) => (
             <tr key={i}>
               <td>{i + 1}</td>
-              <td>{who(b.hunter)}</td>
-              <td>{fmt(b.score)}</td>
+              <td>{who(pt.hunter)}</td>
+              <td>{fmt(pt.score)}</td>
             </tr>
           ))}
         </tbody>
