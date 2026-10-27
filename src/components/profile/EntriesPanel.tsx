@@ -38,13 +38,13 @@ import {
 } from './glyphs';
 
 /**
- * The Entries tab: polymarket's Positions panel for bounties. An Active | Ended toggle, a search and a sort, then
- * Active rows (one per board bounty still open, ranked by the shared standings engine) or Ended rows: the seeded past
- * results (medal or flag tiles, not links: those bounties are off the board) plus your board bounties whose deadline
- * has passed (their own meme, linking to the bounty). A board bounty is in exactly one list, so no meme repeats.
+ * The Live bounties and Won bounties tabs: polymarket's Positions panel for bounties, a search and a sort over one list.
+ * Live: one row per board bounty still open, ranked by the shared standings engine. Won: every finish in the prizes
+ * (the seeded past results, medal tiles, plus your board bounties that closed with you in a paid place, their own meme
+ * linking to the bounty), all shown at once. Unplaced finishes live in Activity. A board bounty is in one list at most.
  */
 
-type Status = 'active' | 'ended';
+export type EntriesView = 'live' | 'won';
 type ActiveSort = 'rank' | 'ending' | 'prize';
 type EndedSort = 'recent' | 'payout' | 'rank';
 
@@ -110,8 +110,15 @@ export function sortEnded(rows: PastResult[], sort: EndedSort): PastResult[] {
 
 const matches = (title: string, q: string) => title.toLowerCase().includes(q.trim().toLowerCase());
 
-export function EntriesPanel({ entries, past, handle, now }: { entries: Entry[]; past: PastResult[]; handle: string; now: number }) {
-  const [status, setStatus] = useState<Status>('active');
+/** Every finish in the prizes: a final rank that paid out (1st to 3rd on every bounty here). Unplaced and unscored finishes are not wins. */
+export const wonResults = (ended: PastResult[]): PastResult[] => ended.filter((p) => !p.unscored && p.payout > 0);
+
+/** Every won bounty, from the seeded past results and your board bounties that have closed. */
+export function allWon(entries: Entry[], past: PastResult[], handle: string, now: number): PastResult[] {
+  return wonResults(mergeEnded(past, endedBoardResults(entries, handle, now)));
+}
+
+export function EntriesPanel({ view, entries, past, handle, now }: { view: EntriesView; entries: Entry[]; past: PastResult[]; handle: string; now: number }) {
   const [query, setQuery] = useState('');
   const [activeSort, setActiveSort] = useState<ActiveSort>('rank');
   const [endedSort, setEndedSort] = useState<EndedSort>('recent');
@@ -119,14 +126,10 @@ export function EntriesPanel({ entries, past, handle, now }: { entries: Entry[];
   const searchRef = useRef<HTMLInputElement>(null);
 
   const active = useMemo(() => activeRows(entries, handle, BOARD_BOUNTIES, now), [entries, handle, now]);
-  const ended = useMemo(() => mergeEnded(past, endedBoardResults(entries, handle, now)), [past, entries, handle, now]);
+  const won = useMemo(() => allWon(entries, past, handle, now), [past, entries, handle, now]);
   const activeShown = useMemo(() => sortActive(active.filter((r) => matches(r.bounty.title, query)), activeSort), [active, query, activeSort]);
-  const endedShown = useMemo(() => sortEnded(ended.filter((p) => matches(p.title, query)), endedSort), [ended, query, endedSort]);
+  const wonShown = useMemo(() => sortEnded(won.filter((p) => matches(p.title, query)), endedSort), [won, query, endedSort]);
 
-  const pick = (next: Status) => {
-    setStatus(next);
-    setShown(PAGE_SIZE);
-  };
   const search = (q: string) => {
     setQuery(q);
     setShown(PAGE_SIZE);
@@ -136,14 +139,15 @@ export function EntriesPanel({ entries, past, handle, now }: { entries: Entry[];
     searchRef.current?.focus();
   };
 
-  const total = status === 'active' ? active.length : ended.length;
-  const list = status === 'active' ? activeShown : endedShown;
+  const live = view === 'live';
+  const total = live ? active.length : won.length;
+  const list = live ? activeShown : wonShown;
 
   let body: ReactNode;
   if (total === 0) {
     body = (
       <EmptyState
-        sentence={status === 'active' ? 'No active entries yet.' : 'No ended bounties yet.'}
+        sentence={live ? 'No live entries yet.' : 'No won bounties yet.'}
         action={
           <a href={appHref('/')} className={EMPTY_ACTION}>
             Browse bounties
@@ -162,14 +166,14 @@ export function EntriesPanel({ entries, past, handle, now }: { entries: Entry[];
         }
       />
     );
-  } else if (status === 'active') {
+  } else if (live) {
     body = (
       <>
         <ListHeader
           grid={ACTIVE_GRID}
           columns={[{ label: 'Bounty' }, { label: 'Your best', end: true }, { label: 'Rank', end: true }, { label: 'Ends in', end: true }, { label: 'Prize now', end: true }]}
         />
-        <ul aria-label="Active entries" className="flex flex-col">
+        <ul aria-label="Live entries" className="flex flex-col">
           {activeShown.slice(0, shown).map((r) => (
             <ActiveItem key={r.bounty.slug} row={r} now={now} />
           ))}
@@ -183,8 +187,9 @@ export function EntriesPanel({ entries, past, handle, now }: { entries: Entry[];
           grid={ENDED_GRID}
           columns={[{ label: 'Result' }, { label: 'Bounty' }, { label: 'Final rank', end: true }, { label: 'Your score', end: true }, { label: 'Payout', end: true }]}
         />
-        <ul aria-label="Ended bounties" className="flex flex-col">
-          {endedShown.slice(0, shown).map((p) => (
+        {/* Every won bounty, all at once: no Show more. */}
+        <ul aria-label="Won bounties" className="flex flex-col">
+          {wonShown.map((p) => (
             <EndedItem key={p.id} result={p} />
           ))}
         </ul>
@@ -195,10 +200,6 @@ export function EntriesPanel({ entries, past, handle, now }: { entries: Entry[];
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-2 md:flex-row">
-        <div role="group" aria-label="Entry status" className="flex h-10 shrink-0 gap-0.5 rounded-md border border-pk-border p-0.5">
-          <StatusChip label="Active" count={active.length} pressed={status === 'active'} onClick={() => pick('active')} testId="profile-status-active" />
-          <StatusChip label="Ended" count={ended.length} pressed={status === 'ended'} onClick={() => pick('ended')} testId="profile-status-ended" />
-        </div>
         <div className="flex min-w-0 flex-1 gap-2">
           <label className="flex h-10 min-w-0 flex-1 cursor-text items-center gap-1 rounded-md border border-pk-gray-200 bg-pk-surface px-2.5 transition-colors motion-reduce:transition-none hover:border-pk-gray-300 focus-within:border-pk-gray-300 focus-within:ring-2 focus-within:ring-pk-content-secondary/40">
             <span className="shrink-0 text-pk-content-secondary">
@@ -208,8 +209,8 @@ export function EntriesPanel({ entries, past, handle, now }: { entries: Entry[];
               ref={searchRef}
               type="search"
               autoComplete="off"
-              aria-label="Search entries"
-              placeholder="Search entries"
+              aria-label={live ? 'Search live bounties' : 'Search won bounties'}
+              placeholder={live ? 'Search live bounties' : 'Search won bounties'}
               value={query}
               onChange={(e) => search(e.target.value)}
               onKeyDown={(e) => {
@@ -232,7 +233,7 @@ export function EntriesPanel({ entries, past, handle, now }: { entries: Entry[];
               </button>
             )}
           </label>
-          {status === 'active' ? (
+          {live ? (
             <SelectMenu label="Sort by" testId="profile-sort" value={activeSort} options={ACTIVE_SORTS} onChange={setActiveSort} />
           ) : (
             <SelectMenu label="Sort by" testId="profile-sort" value={endedSort} options={ENDED_SORTS} onChange={setEndedSort} />
@@ -240,28 +241,11 @@ export function EntriesPanel({ entries, past, handle, now }: { entries: Entry[];
         </div>
       </div>
 
-      <div data-testid={status === 'active' ? 'profile-active-list' : 'profile-ended-list'} data-status={status}>
+      <div data-testid={live ? 'profile-live-list' : 'profile-won-list'} data-view={view}>
         {body}
-        {list.length > shown && <ShowMore remaining={list.length - shown} onClick={() => setShown((n) => n + PAGE_SIZE)} />}
+        {live && list.length > shown && <ShowMore remaining={list.length - shown} onClick={() => setShown((n) => n + PAGE_SIZE)} />}
       </div>
     </div>
-  );
-}
-
-function StatusChip({ label, count, pressed, onClick, testId }: { label: string; count: number; pressed: boolean; onClick: () => void; testId: string }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={pressed}
-      onClick={onClick}
-      data-testid={testId}
-      className={`inline-flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 text-body-base font-semibold transition-colors motion-reduce:transition-none md:flex-none ${FOCUS_RING} ${
-        pressed ? 'bg-pk-gray-100 text-pk-content-primary' : 'text-pk-content-secondary hover:text-pk-content-primary'
-      }`}
-    >
-      {label}
-      <span className="text-body-sm text-pk-content-secondary tabular-nums">{count}</span>
-    </button>
   );
 }
 
@@ -465,7 +449,7 @@ function EndedItem({ result: p }: { result: PastResult }) {
     </>
   );
   return (
-    <li data-testid="profile-ended-row" data-id={p.id} data-slug={p.slug} data-result={result} data-rank={p.unscored ? undefined : p.finalRank} className="rounded-md odd:bg-pk-gray-100/60">
+    <li data-testid="profile-won-row"data-id={p.id} data-slug={p.slug} data-result={result} data-rank={p.unscored ? undefined : p.finalRank} className="rounded-md odd:bg-pk-gray-100/60">
       {bounty ? (
         <a href={bountyPath(bounty.slug)} className={`${ENDED_ROW} transition-colors hover:bg-pk-gray-100 motion-reduce:transition-none ${FOCUS_RING}`}>
           {cells}

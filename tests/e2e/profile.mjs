@@ -81,6 +81,18 @@ ok('earnings card with a total', /\$[\d,]+/.test(await tid('profile-earnings-tot
 }
 await p.screenshot({ path: `${OUT}/profile-active.png`, fullPage: true });
 
+// the switch: Live bounties | Won bounties | Activity, large labels, the selected one underlined by a thick bar
+const tabNames = await p.$$eval('[role=tablist][aria-label="Profile sections"] [role=tab]', (tabs) => tabs.map((t) => t.textContent.replace(/\d+/g, '').trim()));
+ok('tabs read Live bounties, Won bounties, Activity', JSON.stringify(tabNames) === JSON.stringify(['Live bounties', 'Won bounties', 'Activity']), tabNames.join(' | '));
+const underline = () =>
+  p.$eval('[role=tablist][aria-label="Profile sections"] [role=tab][aria-selected=true]', (el) => {
+    const bar = getComputedStyle(el, '::after');
+    return { id: el.id, bar: parseFloat(bar.height), barWidth: Math.round(parseFloat(bar.width)), tabWidth: Math.round(el.getBoundingClientRect().width), font: parseFloat(getComputedStyle(el).fontSize) };
+  });
+const u0 = await underline();
+ok('Live bounties is selected first, large label, thick full-width underline', u0.id === 'profile-tab-live' && u0.bar >= 3 && u0.barWidth >= u0.tabWidth - 1 && u0.font >= 18, JSON.stringify(u0));
+ok('the small Active/Ended toggle is gone', (await p.locator('[data-testid^="profile-status-"]').count()) === 0);
+
 // active entries: one row per bounty, live ranks, links to the bounty
 const active = tid('profile-active-row');
 const nActive = await active.count();
@@ -99,15 +111,21 @@ ok('search with no match shows one sentence and one action', (await tid('profile
 await p.locator('[data-testid=profile-search] input, input[data-testid=profile-search]').first().fill('');
 await settle();
 
-// ended
-await tid('profile-status-ended').click();
+// won bounties: every prize finish, all at once
+await tid('profile-tab-won').click();
 await settle();
-const ended = tid('profile-ended-row');
-const results_ = await ended.evaluateAll((rows) => rows.map((r) => r.getAttribute('data-result')));
-ok('ended bounties with results', (await ended.count()) >= 4 && results_.includes('won') && results_.includes('unplaced'), results_.join(','));
-ok('ended rows show final rank and payout', /#\d+ of \d+/.test(await ended.first().innerText()) && /\$/.test(await ended.first().innerText()));
-ok('ended panel has no images', (await p.$$eval('[data-testid=profile-ended-row] img', (i) => i.length)) === 0);
-await p.screenshot({ path: `${OUT}/profile-ended.png`, fullPage: true });
+const u1 = await underline();
+ok('Won bounties takes the thick underline', u1.id === 'profile-tab-won' && u1.bar >= 3, JSON.stringify(u1));
+const won = tid('profile-won-row');
+const wonRows = await won.evaluateAll((rows) => rows.map((r) => ({ result: r.getAttribute('data-result'), text: r.innerText.replace(/\s+/g, ' ') })));
+const wonBadge = Number((await tid('profile-tab-won').innerText()).match(/\d+/)?.[0] ?? -1);
+ok('Won lists every prize finish, all at once', wonRows.length >= 2 && wonRows.length === wonBadge && wonRows.every((r) => r.result === 'won' || r.result === 'placed') && (await tid('profile-show-more').count()) === 0, `${wonRows.map((r) => r.result).join(',')} (tab badge ${wonBadge})`);
+ok('every won row shows its final rank and payout', wonRows.every((r) => /#\d+ of \d+/.test(r.text) && /\+\$[\d,]+/.test(r.text)));
+const paidSum = wonRows.reduce((s, r) => s + Number((r.text.match(/\+\$([\d,]+)/)?.[1] ?? '0').replace(/,/g, '')), 0);
+const earned = Number((await tid('profile-total-earned').innerText()).replace(/[^\d]/g, ''));
+ok('won payouts add up to Total earned', paidSum === earned, `${paidSum} vs ${earned}`);
+ok('past wins show medals, not memes', (await p.$$eval('[data-testid=profile-won-row]:not([data-slug]) img', (i) => i.length)) === 0);
+await p.screenshot({ path: `${OUT}/profile-won.png`, fullPage: true });
 
 // activity
 await tid('profile-tab-activity').click();
@@ -117,7 +135,9 @@ const more = tid('profile-show-more');
 if (await more.count()) { await more.click(); await settle(); }
 ok('activity feed pages with Show more', nAct >= 5 && (await tid('profile-activity-row').count()) >= nAct, `${nAct} then ${await tid('profile-activity-row').count()}`);
 ok('activity has no images', (await p.$$eval('[data-testid=profile-activity-row] img', (i) => i.length)) === 0);
-await tid('profile-tab-entries').click();
+const finished = await p.$$eval('[data-testid=profile-activity-row][data-kind=finished]', (rows) => rows.length);
+ok('unplaced finishes stay visible in Activity', finished > wonRows.length, `${finished} finished rows, ${wonRows.length} wins`);
+await tid('profile-tab-live').click();
 await settle();
 
 // a row opens its bounty

@@ -4,21 +4,26 @@ import { activity, endedBoardResults, mergeEnded, pastResults, profileStats, PRO
 import { ActivityPanel } from './ActivityPanel';
 import { EarningsCard } from './EarningsCard';
 import { EditProfileDialog } from './EditProfileDialog';
-import { EntriesPanel } from './EntriesPanel';
-import { FOCUS_RING, TAB_LABEL } from './glyphs';
+import { activeRows, allWon, EntriesPanel } from './EntriesPanel';
+import { FOCUS_RING } from './glyphs';
 import { IdentityCard } from './IdentityCard';
 
 /**
  * /profile: polymarket.com's profile page reshaped for agent bounties. The two-card top (identity and earnings), then
- * the Entries | Activity tabs. Everything reads the localStorage profile and entries through profile.ts, so an edit,
- * a new entry or a verification landing updates the page without a reload.
+ * the Live bounties | Won bounties | Activity tabs. Everything reads the localStorage profile and entries through
+ * profile.ts, so an edit, a new entry or a verification landing updates the page without a reload.
  */
 
-type Tab = 'entries' | 'activity';
+type Tab = 'live' | 'won' | 'activity';
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'entries', label: 'Entries' },
+  { id: 'live', label: 'Live bounties' },
+  { id: 'won', label: 'Won bounties' },
   { id: 'activity', label: 'Activity' },
 ];
+/* A clear switch: large labels over one hairline, the selected tab underlined by a thick bar sitting on that line. */
+const TAB = 'relative -mb-px inline-flex shrink-0 cursor-pointer items-baseline gap-1.5 rounded-t-md pt-1 pb-3 text-heading-xl transition-colors motion-reduce:transition-none';
+const TAB_ON = 'text-pk-content-primary after:absolute after:inset-x-0 after:bottom-0 after:h-0.75 after:rounded-full after:bg-pk-content-primary';
+const TAB_OFF = 'text-pk-content-secondary hover:text-pk-content-primary';
 const EDIT_PARAM = 'edit';
 
 const editRequested = () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get(EDIT_PARAM) === '1';
@@ -33,13 +38,19 @@ export function ProfilePage() {
   const ended = useMemo(() => endedBoardResults(entries, profile.handle, now), [entries, profile.handle, now]);
   const items = useMemo(() => activity(entries, past, BOARD_BOUNTIES, now), [entries, past, now]);
 
-  const [tab, setTab] = useState<Tab>('entries');
+  const counts: Record<Tab, number> = {
+    live: useMemo(() => activeRows(entries, profile.handle, BOARD_BOUNTIES, now).length, [entries, profile.handle, now]),
+    won: useMemo(() => allWon(entries, past, profile.handle, now).length, [entries, past, profile.handle, now]),
+    activity: items.length,
+  };
+
+  const [tab, setTab] = useState<Tab>('live');
   const [editing, setEditing] = useState(editRequested);
   /** Bumped on every opening: the dialog remounts with a fresh draft. */
   const [editSession, setEditSession] = useState(0);
   const [announce, setAnnounce] = useState('');
   const editRef = useRef<HTMLButtonElement>(null);
-  const tabRefs = useRef<Record<Tab, HTMLButtonElement | null>>({ entries: null, activity: null });
+  const tabRefs = useRef<Record<Tab, HTMLButtonElement | null>>({ live: null, won: null, activity: null });
 
   const editingRef = useRef(editing);
   useEffect(() => {
@@ -101,7 +112,7 @@ export function ProfilePage() {
         <EarningsCard past={mergeEnded(past, ended)} now={now} joinedAt={profile.joinedAt} />
       </div>
 
-      <div role="tablist" aria-label="Profile sections" className="no-scrollbar mt-8 -mx-1 flex gap-5 overflow-x-auto px-1">
+      <div role="tablist" aria-label="Profile sections" className="no-scrollbar mt-8 flex gap-6 overflow-x-auto border-b border-pk-border md:gap-8">
         {TABS.map((t) => {
           const selected = t.id === tab;
           return (
@@ -119,18 +130,22 @@ export function ProfilePage() {
               onClick={() => setTab(t.id)}
               onKeyDown={onTabKey}
               data-testid={`profile-tab-${t.id}`}
-              className={`shrink-0 cursor-pointer rounded-md py-1 transition-colors motion-reduce:transition-none ${TAB_LABEL} ${FOCUS_RING} ${
-                selected ? 'text-pk-content-primary' : 'text-pk-content-secondary hover:text-pk-content-primary'
-              }`}
+              className={`${TAB} ${FOCUS_RING} ${selected ? TAB_ON : TAB_OFF}`}
             >
               {t.label}
+              <span className="text-body-base font-medium text-pk-content-secondary tabular-nums">{counts[t.id]}</span>
             </button>
           );
         })}
       </div>
 
-      <div role="tabpanel" id={`profile-panel-${tab}`} aria-labelledby={`profile-tab-${tab}`} data-panel={tab} className="mt-4">
-        {tab === 'entries' ? <EntriesPanel entries={entries} past={past} handle={profile.handle} now={now} /> : <ActivityPanel items={items} now={now} />}
+      <div role="tabpanel" id={`profile-panel-${tab}`} aria-labelledby={`profile-tab-${tab}`} data-panel={tab} className="mt-5">
+        {tab === 'activity' ? (
+          <ActivityPanel items={items} now={now} />
+        ) : (
+          // Keyed by tab so each list starts with a fresh search and sort.
+          <EntriesPanel key={tab} view={tab} entries={entries} past={past} handle={profile.handle} now={now} />
+        )}
       </div>
 
       <EditProfileDialog key={editSession} open={editing} profile={profile} onClose={closeEdit} onSaved={saved} />
