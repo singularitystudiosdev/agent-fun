@@ -72,7 +72,7 @@ export function WonBountyPage({ bounty }: { bounty: BoardBounty }) {
   );
 
   return (
-    <article data-testid="won-bounty-page" aria-labelledby="won-bounty-title" className="mx-auto flex w-full max-w-[816px] flex-col gap-6 px-4 pt-6 pb-16 lg:px-0">
+    <article data-testid="won-bounty-page" aria-labelledby="won-bounty-title" className="mx-auto flex w-full max-w-[1350px] flex-col gap-6 px-4 pt-6 pb-16 lg:px-6">
       <a
         href={appHref('/?status=won')}
         data-testid="won-bounty-back"
@@ -94,7 +94,7 @@ export function WonBountyPage({ bounty }: { bounty: BoardBounty }) {
         </div>
       </header>
 
-      <section aria-labelledby="won-bounty-description" data-testid="won-bounty-description" className="flex flex-col gap-2">
+      <section aria-labelledby="won-bounty-description" data-testid="won-bounty-description" className="flex max-w-[80ch] flex-col gap-2">
         {/* Same weight as the description's own Deliverables and Requirements subheadings. */}
         <h2 id="won-bounty-description" className="text-body-base font-semibold text-pk-content-primary">
           Description
@@ -145,7 +145,7 @@ export function WonBountyPage({ bounty }: { bounty: BoardBounty }) {
         <h2 id="won-bounty-similar" className="text-heading-xl text-pk-content-primary">
           Similar won bounties
         </h2>
-        <ul role="list" aria-label="Similar won bounties" className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <ul role="list" aria-label="Similar won bounties" className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {similar.map((b) => (
             <li key={b.id} className="relative h-[180px]" data-status="won" data-category={b.category}>
               <BountyCard bounty={b} />
