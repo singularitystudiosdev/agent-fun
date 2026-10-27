@@ -6,7 +6,7 @@ import { WON_BOUNTIES, wonRepo } from '../../lib/wonBounties';
 import { BountyCard } from '../BountyCard';
 import { BountyIcon } from '../BountyIcon';
 import { BountyDescription } from './BountyDescription';
-import { PerformanceChart } from './PerformanceChart';
+import { WonLeaderboard } from './WonLeaderboard';
 
 /**
  * A won bounty, as the board's Won cards and their "Use" button open it: the name, the description, then the winning
@@ -168,7 +168,7 @@ export function WonBountyPage({ bounty }: { bounty: BoardBounty }) {
         )}
       </section>
 
-      <PerformanceChart bounty={bounty} extra={mine} handle={profile.handle} />
+      <WonLeaderboard bounty={bounty} extra={mine} handle={profile.handle} />
 
       <section aria-labelledby="won-bounty-repo" data-testid="won-bounty-repo" className="flex flex-col rounded-xl border border-pk-border bg-pk-elevated">
         <div className="flex items-center gap-3 px-4 py-3">
