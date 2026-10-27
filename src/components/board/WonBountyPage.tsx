@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { formatBountyAmount, type BoardBounty } from '../../lib/bounty';
 import { appHref } from '../../lib/paths';
 import { useProfile, useWinners } from '../../lib/profile';
-import { wonRepo } from '../../lib/wonBounties';
+import { WON_BOUNTIES, wonRepo } from '../../lib/wonBounties';
+import { BountyCard } from '../BountyCard';
 import { BountyIcon } from '../BountyIcon';
+import { HEADING_3XL } from '../profile/glyphs';
 import { BountyDescription } from './BountyDescription';
 
 /**
@@ -61,6 +63,14 @@ export function WonBountyPage({ bounty }: { bounty: BoardBounty }) {
   const owner = githubOwner(winner ? (winner.you ? profile.handle : winner.hunter) : bounty.sponsor.slug ?? bounty.sponsor.name);
   const repo = `github.com/${owner}/${wonRepo(bounty.slug) ?? bounty.slug}`;
   const clone = `git clone https://${repo}.git`;
+  // Every other won bounty: same category first, then the rest, each group highest reward first. All memes stay unique.
+  const similar = useMemo(
+    () =>
+      WON_BOUNTIES.filter((b) => b.slug !== bounty.slug).sort(
+        (a, b) => Number(b.category === bounty.category) - Number(a.category === bounty.category) || b.rewardAmount - a.rewardAmount,
+      ),
+    [bounty.slug, bounty.category],
+  );
 
   return (
     <article data-testid="won-bounty-page" aria-labelledby="won-bounty-title" className="mx-auto flex w-full max-w-[816px] flex-col gap-6 px-4 pt-6 pb-16 lg:px-0">
@@ -85,7 +95,22 @@ export function WonBountyPage({ bounty }: { bounty: BoardBounty }) {
         </div>
       </header>
 
-      <section aria-label="Description" data-testid="won-bounty-description">
+      <div className="flex flex-col gap-0.5" data-testid="won-bounty-won">
+        <p className="text-body-sm text-pk-content-secondary">Won</p>
+        <p className={`${HEADING_3XL} text-pk-green-600 tabular-nums`}>{formatBountyAmount(winner?.payout ?? bounty.rewardAmount)}</p>
+        {winner && (
+          <p className="text-body-sm text-pk-content-secondary">
+            by @{winner.you ? profile.handle : winner.hunter}
+            {winner.you && ' (you)'}
+          </p>
+        )}
+      </div>
+
+      <section aria-labelledby="won-bounty-description" data-testid="won-bounty-description" className="flex flex-col gap-2">
+        {/* Same weight as the description's own Deliverables and Requirements subheadings. */}
+        <h2 id="won-bounty-description" className="text-body-base font-semibold text-pk-content-primary">
+          Description
+        </h2>
         <BountyDescription text={bounty.description ?? ''} />
       </section>
 
@@ -126,6 +151,19 @@ export function WonBountyPage({ bounty }: { bounty: BoardBounty }) {
           </code>
           <CopyButton text={clone} label="clone command" testId="won-bounty-copy-clone" />
         </div>
+      </section>
+
+      <section aria-labelledby="won-bounty-similar" data-testid="won-bounty-similar" className="mt-4 flex flex-col gap-3">
+        <h2 id="won-bounty-similar" className="text-heading-xl text-pk-content-primary">
+          Similar won bounties
+        </h2>
+        <ul role="list" aria-label="Similar won bounties" className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {similar.map((b) => (
+            <li key={b.id} className="relative h-[180px]" data-status="won" data-category={b.category}>
+              <BountyCard bounty={b} />
+            </li>
+          ))}
+        </ul>
       </section>
     </article>
   );
