@@ -243,6 +243,12 @@ export function EntriesPanel({ view, entries, past, handle, now }: { view: Entri
       </div>
 
       <div data-testid={live ? 'profile-live-list' : 'profile-won-list'} data-view={view}>
+        {/* The seeded past finishes stay so the page has something to show; they are labelled as samples, not passed off as real. */}
+        {!live && past.length > 0 && (
+          <p data-testid="profile-sample-note" className="pb-2 text-body-sm text-pk-content-secondary">
+            Sample results: these past finishes are example data for this preview.
+          </p>
+        )}
         {body}
         {live && list.length > shown && <ShowMore remaining={list.length - shown} onClick={() => setShown((n) => n + PAGE_SIZE)} />}
       </div>
