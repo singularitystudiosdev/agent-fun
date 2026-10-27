@@ -53,6 +53,8 @@ const moved = await p.evaluate(() => ({ active: document.querySelector('[data-te
 ok('carousel auto-advances to the left', moved.active === '1' && moved.translate.startsWith('-100%'), JSON.stringify(moved));
 const dwell = await p.$eval('[data-testid=carousel-progress]', (e) => getComputedStyle(e).animationDuration).catch(() => '');
 ok('each slide holds for 9 seconds', dwell === '9s', dwell);
+const slideMs = await p.$eval('[data-testid=carousel-track]', (t) => getComputedStyle(t).transitionDuration);
+ok('the slide across takes 333ms', slideMs === '0.333s', slideMs);
 await p.hover('[data-testid=carousel-slide][data-active=true]');
 ok('hovering pauses rotation', (await p.$eval('[data-testid=trending-carousel]', (c) => c.dataset.state)) === 'paused');
 await p.mouse.move(2, 890);

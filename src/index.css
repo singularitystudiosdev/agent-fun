@@ -222,11 +222,11 @@
   }
 }
 
-/* Trending carousel (TrendingCarousel.tsx). The strip moves one full card width, a container-sized move, so it takes the
-   deliberate band: 500ms, ease-in-out so it leaves and lands gently, which reads as a smooth scroll to the left. */
+/* Trending carousel (TrendingCarousel.tsx). The strip moves one full card width, a container-sized move: 333ms (the
+   owner asked for 1.5x the first 500ms), ease-in-out so it leaves and lands gently, which reads as a smooth scroll left. */
 @utility pk-slide {
   transition-property: translate;
-  transition-duration: 500ms; /* deliberate */
+  transition-duration: 333ms; /* deliberate */
   transition-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
 }
 /* One slide's dwell, 9s, run as an animation on a hidden element: its animationend advances the slide, so pausing the
