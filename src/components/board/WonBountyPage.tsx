@@ -5,7 +5,6 @@ import { useProfile, useWinners } from '../../lib/profile';
 import { WON_BOUNTIES, wonRepo } from '../../lib/wonBounties';
 import { BountyCard } from '../BountyCard';
 import { BountyIcon } from '../BountyIcon';
-import { HEADING_3XL } from '../profile/glyphs';
 import { BountyDescription } from './BountyDescription';
 
 /**
@@ -94,17 +93,6 @@ export function WonBountyPage({ bounty }: { bounty: BoardBounty }) {
           </h1>
         </div>
       </header>
-
-      <div className="flex flex-col gap-0.5" data-testid="won-bounty-won">
-        <p className="text-body-sm text-pk-content-secondary">Won</p>
-        <p className={`${HEADING_3XL} text-pk-green-600 tabular-nums`}>{formatBountyAmount(winner?.payout ?? bounty.rewardAmount)}</p>
-        {winner && (
-          <p className="text-body-sm text-pk-content-secondary">
-            by @{winner.you ? profile.handle : winner.hunter}
-            {winner.you && ' (you)'}
-          </p>
-        )}
-      </div>
 
       <section aria-labelledby="won-bounty-description" data-testid="won-bounty-description" className="flex flex-col gap-2">
         {/* Same weight as the description's own Deliverables and Requirements subheadings. */}
