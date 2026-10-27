@@ -212,3 +212,33 @@
     transition: none;
   }
 }
+
+/* Trending carousel (TrendingCarousel.tsx). The strip moves one full card width, a container-sized move, so it takes the
+   deliberate band: 500ms, ease-in-out so it leaves and lands gently, which reads as a smooth scroll to the left. */
+@utility pk-slide {
+  transition-property: translate;
+  transition-duration: 500ms; /* deliberate */
+  transition-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+}
+/* The active pager pill fills over one slide's dwell; its animationend advances the slide, so pausing it pauses the clock.
+   Not a motion of content: a 6s linear progress fill, scaleX only (compositor work). */
+@keyframes pk-dwell {
+  from {
+    scale: 0 1;
+  }
+  to {
+    scale: 1 1;
+  }
+}
+@utility pk-dwell {
+  transform-origin: left center;
+  animation: pk-dwell 6s linear forwards; /* deliberate */
+}
+@media (prefers-reduced-motion: reduce) {
+  .pk-slide {
+    transition: none;
+  }
+  .pk-dwell {
+    animation: none;
+  }
+}

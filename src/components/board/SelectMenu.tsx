@@ -37,6 +37,8 @@ const TRIGGER = `inline-flex h-10 shrink-0 cursor-pointer select-none items-cent
 
 /* Clears the viewport edge by 16px (the gutter `px-4` the board uses on phones). */
 const EDGE = 16;
+/** The popup's `mt-2` / `mb-2` offset from its trigger, in px. */
+const GAP = 8;
 
 /** Opening one menu closes every other one on the page. */
 const OPEN_EVENT = 'pk-select-menu-open';
@@ -82,6 +84,8 @@ export function SelectMenu<T extends string | number>({
   /** Where focus lands when the popup mounts: the picked item, the last item, the custom field, or the popup itself (a pointer open). */
   const [initialFocus, setInitialFocus] = useState<'checked' | 'last' | 'custom' | 'menu'>('checked');
   const [shift, setShift] = useState(0);
+  /** Vertical placement: open upward when there is more room above, and cap the height to the room it has (Floating UI's flip + size). */
+  const [vertical, setVertical] = useState<{ up: boolean; maxHeight: number | null }>({ up: false, maxHeight: null });
   const [customText, setCustomText] = useState('');
   const openedWith = useRef(value);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -102,6 +106,7 @@ export function SelectMenu<T extends string | number>({
     // A typed value has no row to land on: keyboard opens go to its field instead.
     setInitialFocus(isCustom && focus === 'checked' ? 'custom' : focus);
     setShift(0);
+    setVertical({ up: false, maxHeight: null });
     setOpen(true);
   };
 
@@ -127,16 +132,25 @@ export function SelectMenu<T extends string | number>({
     close(true);
   };
 
-  // Keep the popup on screen: shift it left when it would cross the viewport's right edge (narrow phones).
+  // Keep the popup on screen: shift it left when it would cross the viewport's right edge (narrow phones), and flip it
+  // above the trigger when the board sits low (under the trending carousel) and below has less room than above. The
+  // room above ends at the sticky site header, which would otherwise cover the menu's top rows.
   useLayoutEffect(() => {
     if (!open) return;
     const place = () => {
       const menu = popupRef.current;
       const root = rootRef.current;
       if (!menu || !root) return;
-      const left = root.getBoundingClientRect().left;
-      const overflow = left + menu.offsetWidth - (document.documentElement.clientWidth - EDGE);
-      setShift(overflow > 0 ? -Math.min(overflow, left - EDGE) : 0);
+      const box = root.getBoundingClientRect();
+      const overflow = box.left + menu.offsetWidth - (document.documentElement.clientWidth - EDGE);
+      setShift(overflow > 0 ? -Math.min(overflow, box.left - EDGE) : 0);
+      const header = document.querySelector('[data-testid="site-header"]')?.getBoundingClientRect().bottom ?? 0;
+      const below = window.innerHeight - box.bottom - GAP - EDGE;
+      const above = box.top - Math.max(header, 0) - GAP - EDGE;
+      const height = menu.scrollHeight;
+      const up = height > below && above > below;
+      const room = Math.max(up ? above : below, 0);
+      setVertical({ up, maxHeight: height > room ? room : null });
     };
     place();
     window.addEventListener('resize', place);
@@ -296,8 +310,11 @@ export function SelectMenu<T extends string | number>({
       {open && (
         <div
           ref={popupRef}
-          style={shift ? { left: shift } : undefined}
-          className="absolute top-full left-0 z-30 mt-2 flex w-max min-w-[max(100%,12.5rem)] max-w-[calc(100vw-2rem)] origin-top-left flex-col rounded-xl bg-pk-surface p-2 shadow-pk-middle transition-[opacity,scale] duration-150 ease-out starting:scale-95 starting:opacity-0 motion-reduce:transition-none"
+          style={{ left: shift || undefined, maxHeight: vertical.maxHeight ?? undefined }}
+          data-side={vertical.up ? 'top' : 'bottom'}
+          className={`absolute left-0 z-30 flex w-max min-w-[max(100%,12.5rem)] max-w-[calc(100vw-2rem)] flex-col overflow-y-auto overscroll-contain rounded-xl bg-pk-surface p-2 shadow-pk-middle transition-[opacity,scale] duration-150 ease-out starting:scale-95 starting:opacity-0 motion-reduce:transition-none ${
+            vertical.up ? 'bottom-full mb-2 origin-bottom-left' : 'top-full mt-2 origin-top-left'
+          }`}
         >
         <div
           ref={menuRef}

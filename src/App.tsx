@@ -3,6 +3,7 @@ import { AllBounties } from './components/board/AllBounties';
 import { BountyPage } from './components/board/BountyPage';
 import { WonBountyPage } from './components/board/WonBountyPage';
 import { SiteHeader } from './components/board/SiteHeader';
+import { TrendingCarousel } from './components/board/TrendingCarousel';
 import { ProfilePage } from './components/profile/ProfilePage';
 import { applyBoardFilters, DEFAULT_PANEL_FILTERS, isSortFor, sortBounties, tabDefaultSort, type BoardSort, type PanelFilters } from './lib/boardFilters';
 import { boardPath, DEFAULT_STATUS, DEFAULT_TAB, hasTab, isBoardStatus, isBoardTab, selectBounties, type BoardStatus, type BoardTab } from './lib/boardTabs';
@@ -23,6 +24,9 @@ const currentPath = () => appPath(window.location.pathname);
 
 /** Every bounty the board knows: the open listings and every previously won one. Each mode picks its own from this. */
 const ALL_BOUNTIES: BoardBounty[] = [...BOARD_BOUNTIES, ...WON_BOUNTIES];
+
+/** How many of the Trending tab's top bounties the featured carousel cycles through. */
+const FEATURED_COUNT = 5;
 
 /** `?status=won` is the Won bounties board; no param (or anything else) is Live. */
 const readStatus = (): BoardStatus => {
@@ -132,6 +136,8 @@ function Board() {
 
   const bounty = slug ? findBounty(slug) : undefined;
   const tabbed = useMemo(() => selectBounties(ALL_BOUNTIES, tab, Date.now(), status), [tab, status]);
+  /** The featured feed over the grid: the Trending tab's top bounties (polymarket.com shows Featured on its Trending home only). */
+  const featured = useMemo(() => (tab === 'trending' ? tabbed.slice(0, FEATURED_COUNT) : []), [tab, tabbed]);
   const defaultSort = tabDefaultSort(tab, status);
   const sort = sortOverride ?? defaultSort;
   /** Won bounties have no deadline ahead, so the hidden "Ends within" filter never applies there. */
@@ -193,6 +199,12 @@ function Board() {
         ) : slug === null ? (
           <>
             <h1 className="sr-only">{status === 'won' ? 'Won bounties' : 'agent.fun bounties'}</h1>
+            {/* Hidden while searching: the results are what the user asked for. Keyed by mode so a switch starts at slide 1. */}
+            {featured.length > 0 && !query && (
+              <div className="w-full px-4 pt-4 lg:mx-auto lg:max-w-[1350px] lg:px-6">
+                <TrendingCarousel key={status} bounties={featured} status={status} />
+              </div>
+            )}
             <AllBounties
               status={status}
               bounties={shown}

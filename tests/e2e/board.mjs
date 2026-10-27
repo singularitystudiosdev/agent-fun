@@ -27,13 +27,33 @@ ok('brand GIF loads', brandImg);
 ok('no Post a bounty button', !(await p.getByText('Post a bounty').count()));
 const cards = await p.$$eval('[data-testid=bounty-card]', (cs) => cs.length);
 ok('30 bounty cards on home', cards === 30, String(cards));
-ok('no hero / rail / chips', !(await p.$('[data-testid=featured-bounty]')) && !(await p.$('[data-testid=bounty-rail]')) && !(await p.getByText('All bounties', { exact: true }).count()));
+ok('no old hero / rail / chips', !(await p.$('[data-testid=featured-bounty]')) && !(await p.$('[data-testid=bounty-rail]')) && !(await p.getByText('All bounties', { exact: true }).count()));
 const rewards = await p.$$eval('[data-reward]', (els) => els.map((e) => Number(e.getAttribute('data-reward'))));
 ok('Trending sorted by reward desc', rewards.every((r, i) => i === 0 || rewards[i - 1] >= r), rewards.slice(0, 5).join(','));
-// Measured from the header's bottom: the header grew a row (the Live / Won switch), the grid must still follow it directly.
-const firstTop = await p.$eval('[data-testid=bounty-card]', (c) => c.getBoundingClientRect().top);
+// The trending carousel heads the page right under the header, and the grid follows the carousel directly.
 const headerBottom = await p.$eval('[data-testid=site-header]', (h) => h.getBoundingClientRect().bottom);
-ok('grid sits at the top under the header', firstTop - headerBottom < 80, `first card top ${Math.round(firstTop)}px, ${Math.round(firstTop - headerBottom)}px under the header`);
+const carousel = await p.$eval('[data-testid=trending-carousel]', (c) => { const r = c.getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; }).catch(() => null);
+const firstTop = await p.$eval('[data-testid=bounty-card]', (c) => c.getBoundingClientRect().top);
+ok('carousel sits at the top under the header, grid right after it', !!carousel && carousel.top - headerBottom < 40 && firstTop - carousel.bottom < 80, carousel ? `carousel ${Math.round(carousel.top - headerBottom)}px under the header, first card ${Math.round(firstTop - carousel.bottom)}px under the carousel` : 'no carousel');
+// Its slides are Trending's top 5, in order, each with a GIF, the bounty, submissions and a top-3 leaderboard.
+const slides = await p.$$eval('[data-testid=carousel-slide]', (ss) => ss.map((s) => ({ title: s.querySelector('h2')?.textContent.trim(), amount: s.querySelector('[data-testid=carousel-amount]')?.textContent, subs: s.querySelector('[data-testid=carousel-submissions]')?.textContent, rows: s.querySelectorAll('[data-testid=carousel-leaderboard-row]').length, gif: !!s.querySelector('[data-testid=carousel-icon] img') })));
+const top5 = await p.$$eval('[data-testid=bounty-card] h3', (h) => h.slice(0, 5).map((x) => x.textContent.trim()));
+ok('carousel shows Trending top 5 in order', slides.length === 5 && slides.every((s, i) => s.title === top5[i]), slides.map((s) => s.title?.slice(0, 18)).join(' | '));
+ok('each slide has GIF, bounty, submissions and a 3-row leaderboard', slides.every((s) => s.gif && /^\$/.test(s.amount ?? '') && /\d/.test(s.subs ?? '') && s.rows === 3), JSON.stringify(slides[0]));
+ok('one slide active, the rest inert', (await p.$$eval('[data-testid=carousel-slide]', (ss) => ss.filter((s) => !s.inert).length)) === 1);
+// It advances on its own: the strip slides left one card width.
+await p.mouse.move(2, 890);
+const firstActive = await p.$eval('[data-testid=carousel-slide][data-active=true] h2', (h) => h.textContent.trim());
+await p.waitForFunction((t) => document.querySelector('[data-testid=carousel-slide][data-active=true] h2')?.textContent.trim() !== t, firstActive, { timeout: 8000 }).catch(() => {});
+await p.waitForTimeout(700);
+const moved = await p.evaluate(() => ({ active: document.querySelector('[data-testid=carousel-slide][data-active=true]')?.dataset.index, translate: getComputedStyle(document.querySelector('[data-testid=carousel-track]')).translate }));
+ok('carousel auto-advances to the left', moved.active === '1' && moved.translate.startsWith('-100%'), JSON.stringify(moved));
+await p.hover('[data-testid=carousel-track]');
+ok('hovering pauses rotation', (await p.$eval('[data-testid=trending-carousel]', (c) => c.dataset.state)) === 'paused');
+await p.mouse.move(2, 890);
+await p.click('[data-testid=carousel-rotation]');
+ok('rotation control stops it', (await p.$eval('[data-testid=carousel-rotation]', (b) => b.getAttribute('aria-label'))) === 'Start automatic slide show' && (await p.$eval('[data-testid=trending-carousel]', (c) => c.dataset.state)) === 'paused');
+await p.click('[data-testid=carousel-rotation]');
 await p.waitForTimeout(800);
 const icons = await p.$$eval('[data-testid=bounty-icon] img', (imgs) => imgs.map((i) => ({ src: i.currentSrc || i.src, ok: i.complete && i.naturalWidth > 0 })));
 ok('every card icon loaded', icons.length === 30 && icons.every((i) => i.ok), `${icons.filter((i) => i.ok).length}/${icons.length}`);
@@ -54,6 +74,10 @@ for (const [label, check] of [['Ending soon', 'ending'], ['Security', 'Security'
 }
 const secCount = await (async () => { await p.locator('header nav a', { hasText: 'Security' }).first().click(); await p.waitForTimeout(300); const n = await p.$$eval('[data-testid=bounty-card]', (c) => c.length); await p.locator('header nav a', { hasText: 'Trending' }).first().click(); await p.waitForTimeout(300); return n; })();
 ok('category tab filters', secCount > 0 && secCount < 30, String(secCount));
+await p.locator('header nav a', { hasText: 'New' }).first().click(); await p.waitForTimeout(300);
+const carouselOnNew = !!(await p.$('[data-testid=trending-carousel]'));
+await p.locator('header nav a', { hasText: 'Trending' }).first().click(); await p.waitForTimeout(300);
+ok('carousel shows on Trending only', !carouselOnNew && !!(await p.$('[data-testid=trending-carousel]')));
 
 // open a bounty (SPA, no reload)
 await p.evaluate(() => { window.__noReload = 1; });
