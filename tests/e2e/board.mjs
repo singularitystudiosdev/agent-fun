@@ -181,7 +181,7 @@ await p2.close();
   const tradingCount = await ps.$eval('nav[aria-label="Bounty tabs"] a[data-tab=Trading]', (a) => a.innerText.replace(/\D+/g, ''));
   ok('Won: Trading tab shows 3', tradingCount === '3', tradingCount);
   const footer = await ps.$eval('#all-bounties ul > li', (li) => li.innerText.replace(/\s+/g, ' '));
-  ok('Won: card reads Won by @handle and Ended <date>', /Won by @\w+/.test(footer) && /submissions?\s+Ended [A-Z][a-z]{2} \d{1,2}/.test(footer), footer);
+  ok('Won: card reads Won by @handle, a Use button, no end date', /Won by @\w+/.test(footer) && /\bUse\b/.test(footer) && !/Ended [A-Z][a-z]{2} \d{1,2}/.test(footer), footer);
   ok('Won: document title', (await ps.title()) === 'Won bounties | agent.fun', await ps.title());
   await ps.locator('#all-bounties button[aria-label^="Filter bounties"]').click();
   await ps.waitForTimeout(350);
@@ -196,8 +196,8 @@ await p2.close();
 
   const wonHref = await ps.$eval('[data-testid=bounty-card] a', (a) => a.getAttribute('href'));
   await ps.locator('[data-testid=bounty-card] a').first().click();
-  const opened = await ps.waitForSelector('[data-testid=bounty-page]', { timeout: 5000 }).then(() => true, () => false);
-  ok('Won: a won card opens its bounty page', opened && /\/bounty\//.test(ps.url()) && new URL(ps.url()).pathname.endsWith(wonHref.replace(/^.*\/bounty\//, '/bounty/')), new URL(ps.url()).pathname);
+  const opened = await ps.waitForSelector('[data-testid=won-bounty-page]', { timeout: 5000 }).then(() => true, () => false);
+  ok('Won: a won card opens its winning repository', opened && /\/bounty\//.test(ps.url()) && new URL(ps.url()).pathname.endsWith(wonHref.replace(/^.*\/bounty\//, '/bounty/')) && (await ps.locator('[data-testid=won-bounty-repo-url]').count()) === 1, new URL(ps.url()).pathname);
   ok('Won: neither switch side is current on a bounty page', (await ps.locator('[data-testid=status-switch] [aria-current=page]').count()) === 0);
 
   await ps.goto(new URL('?status=won', BASE).href, { waitUntil: 'networkidle' });

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AllBounties } from './components/board/AllBounties';
 import { BountyPage } from './components/board/BountyPage';
+import { WonBountyPage } from './components/board/WonBountyPage';
 import { SiteHeader } from './components/board/SiteHeader';
 import { ProfilePage } from './components/profile/ProfilePage';
 import { applyBoardFilters, DEFAULT_PANEL_FILTERS, isSortFor, sortBounties, tabDefaultSort, type BoardSort, type PanelFilters } from './lib/boardFilters';
@@ -10,7 +11,7 @@ import { BOARD_BOUNTIES } from './lib/bountyData';
 import { appHref, appPath } from './lib/paths';
 import { useProfile } from './lib/profile';
 import { useSavedIds } from './lib/saved';
-import { findBounty, WON_BOUNTIES } from './lib/wonBounties';
+import { findBounty, isEnded, WON_BOUNTIES } from './lib/wonBounties';
 import { ReplicaView } from './ReplicaView';
 
 const view = new URLSearchParams(window.location.search).get('view');
@@ -208,7 +209,8 @@ function Board() {
             />
           </>
         ) : bounty ? (
-          <BountyPage bounty={bounty} />
+          // A won bounty opens its winning repository; a live one opens the full page with the entry form.
+          isEnded(bounty) ? <WonBountyPage bounty={bounty} /> : <BountyPage bounty={bounty} />
         ) : (
           <div className="mx-auto flex max-w-[1350px] flex-col items-start gap-3 px-6 py-16">
             <h1 className="text-heading-xl">This bounty does not exist.</h1>

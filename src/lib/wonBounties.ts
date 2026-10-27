@@ -1037,6 +1037,9 @@ export function buildWon(loadedAt: number = WON_LOAD): BoardBounty[] {
   return SEEDS.map((s) => toWon(s, loadedAt));
 }
 
+/** The winning entry's repository name, e.g. "funding-arb"; undefined for a slug that is not a won bounty. */
+export const wonRepo = (slug: string): string | undefined => SEEDS.find((s) => s.slug === slug)?.repo;
+
 /** Every previously won bounty, built from the board's load instant, in roster order. */
 export const WON_BOUNTIES: BoardBounty[] = buildWon(WON_LOAD);
 

@@ -58,14 +58,6 @@ export function RollingTime({ text, deadline, labelId, urgent }: { text: string;
 
 const LABEL = 'text-body-xs font-semibold! text-pk-content-secondary whitespace-nowrap';
 
-const ENDED_DAY = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
-const ENDED_DAY_YEAR = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-/** The footer's end date: "Oct 7", with the year only when it is not this year's. */
-const formatEndedDay = (iso: string): string => {
-  const d = new Date(iso);
-  return (d.getFullYear() === new Date().getFullYear() ? ENDED_DAY : ENDED_DAY_YEAR).format(d);
-};
-
 /** A board listing (it has a slug and a leaderboard), as opposed to the replica's bare sample card. */
 const isBoardBounty = (b: Bounty): b is BoardBounty => 'slug' in b && 'submissions' in b;
 
@@ -155,24 +147,13 @@ export function BountyCard({ bounty }: { bounty: Bounty }) {
         <div className="flex w-full text-body-sm text-pk-content-secondary relative items-center">
           <div className="flex gap-2 justify-between items-center w-full overflow-x-auto whitespace-nowrap overflow-visible no-scrollbar">
             <div className="flex flex-row gap-1 items-center min-w-0">
-              {won ? (
-                <>
-                  {submissions && <p className="shrink-0">{submissions}</p>}
-                  {/* The rail's own divider between the two facts (a middle dot is a named meta-string tell). */}
-                  {submissions && <span aria-hidden="true" className="mx-1 h-3.5 w-px shrink-0 bg-pk-gray-300" />}
-                  <p className="truncate">
-                    Ended <time dateTime={bounty.deadline}>{formatEndedDay(bounty.deadline)}</time>
-                  </p>
-                </>
-              ) : (
-                submissions && <p className="truncate">{submissions}</p>
-              )}
+              {submissions && <p className="truncate">{submissions}</p>}
             </div>
             <div className="flex shrink-0 items-center gap-1">
               {isBoardBounty(bounty) && (
-                // Live: straight to the entry form. Won: straight to the winners. Sits above the card's stretched link (CARD_SHELL lifts every `a`).
+                // Live: straight to the entry form. Won: the winning repository. Sits above the card's stretched link (CARD_SHELL lifts every `a`).
                 <a
-                  href={`${bounty.url}#${won ? 'winners' : 'submit'}`}
+                  href={won ? bounty.url : `${bounty.url}#submit`}
                   data-testid={won ? 'card-use' : 'card-submit'}
                   className="inline-flex h-7 items-center rounded-full bg-pk-brand-500 px-3 text-body-sm font-semibold whitespace-nowrap text-pk-elevated transition-opacity hover:opacity-90 motion-reduce:transition-none outline-none focus-visible:ring-2 focus-visible:ring-pk-content-secondary focus-visible:ring-offset-1 focus-visible:ring-offset-pk-surface"
                 >
